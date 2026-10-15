@@ -5,6 +5,7 @@ using System.Linq;
 using BepInEx;
 using HarmonyLib;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace SizeboxTweaks
 {
@@ -39,6 +40,12 @@ namespace SizeboxTweaks
             if (Plugin.Test.Value == DevTest.Menu)
             {
                 yield return MenuShots();
+                yield break;
+            }
+
+            if (Plugin.Test.Value == DevTest.UiTour)
+            {
+                yield return UiTour(loader);
                 yield break;
             }
 
@@ -557,6 +564,190 @@ namespace SizeboxTweaks
             yield return Shot("synthetic_stairs");
         }
 
+        // Opens every menu Sizebox has (main menu settings, pause menu and each settings panel)
+        // and screenshots it, scrolled to the top and to the bottom. TestModels = file prefix.
+        private IEnumerator UiTour(SceneLoader loader)
+        {
+            string tag = string.IsNullOrEmpty(Plugin.TestModels.Value) ? "ui" : Plugin.TestModels.Value;
+
+            // Main menu settings
+            MenuController menu = FindObjectOfType<MenuController>();
+            if (menu != null)
+            {
+                yield return Shot($"{tag}_00_main_menu");
+                AccessTools.Method(typeof(MenuController), "OnSettingsClick").Invoke(menu, null);
+                yield return new WaitForSecondsRealtime(1f);
+                yield return ShotScrolls($"{tag}_01_main_settings");
+                // back to the main menu buttons
+                foreach (var v in FindObjectsOfType<SizeboxUI.MainMenuSettingsView>())
+                    v.gameObject.SetActive(false);
+            }
+
+            var stage = loader.GetSceneList().First(s => s.Scene == "Island_SBE");
+            AsyncOperation op = loader.LoadScene(stage);
+            while (op != null && !op.isDone)
+                yield return null;
+            while (GameController.Instance == null || GameController.LocalClient == null)
+                yield return new WaitForSecondsRealtime(0.5f);
+            yield return new WaitForSecondsRealtime(4f);
+            yield return Shot($"{tag}_02_ingame");
+
+            var gui = FindObjectOfType<SizeboxUI.GuiManager>();
+            gui.OpenPauseMenu();
+            yield return new WaitForSecondsRealtime(1f);
+            yield return Shot($"{tag}_03_pause");
+            if (tag == "dump")
+            {
+                DumpUi(gui.Pause.transform, "pause");
+                var sb = new System.Text.StringBuilder();
+                foreach (Font f in Resources.FindObjectsOfTypeAll<Font>())
+                    sb.AppendLine($"font {f.name} dynamic {f.dynamic}");
+                foreach (Sprite sp in Resources.FindObjectsOfTypeAll<Sprite>().Take(400))
+                    sb.AppendLine($"sprite {sp.name} {sp.rect.size} border {sp.border}");
+                File.WriteAllText(Path.Combine(OutDir, "ui_assets.txt"), sb.ToString());
+            }
+            var pause = gui.Pause;
+            var modern = pause.GetComponent<UI.PauseUi>();
+            string[] panels = { "OnSettingsClick", "OnVideoClick", "OnLightingClick", "OnAudioClick", "OnControlsClick", "OnSaveClick" };
+            int n = 4;
+            for (int i = 0; i < panels.Length; i++)
+            {
+                string p = panels[i];
+                Plugin.Log.LogInfo($"[SelfTest] ui tour: {p}");
+                try
+                {
+                    // With the modern menus the first five are tabs of one Settings window
+                    if (modern != null && i < 5)
+                        modern.OpenTab(i);
+                    else
+                        AccessTools.Method(pause.GetType(), p).Invoke(pause, null);
+                }
+                catch (System.Exception e) { Plugin.Log.LogWarning($"[SelfTest] {p}: {e.InnerException?.Message ?? e.Message}"); }
+                yield return new WaitForSecondsRealtime(1f);
+                if (p == "OnVideoClick")
+                    DumpUi(gui.Pause.transform, tag + "_video");
+                yield return ShotScrolls($"{tag}_{n:00}_{p.Replace("On", "").Replace("Click", "").ToLowerInvariant()}");
+                n++;
+                try { pause.CloseIfOpen(); }
+                catch (System.Exception e) { Plugin.Log.LogWarning("[SelfTest] close: " + e.Message); }
+                yield return new WaitForSecondsRealtime(0.5f);
+            }
+
+            // A confirmation prompt (the game's Restart one exists in both versions)
+            AccessTools.Method(pause.GetType(), "OnResetClick").Invoke(pause, null);
+            yield return new WaitForSecondsRealtime(0.8f);
+            DumpUi(FindObjectOfType<UiMessageBox>()?.transform ?? gui.Pause.transform, tag + "_popup");
+            yield return Shot($"{tag}_10_prompt");
+            foreach (var box in FindObjectsOfType<UiMessageBox>())
+                box.Close();
+            yield return new WaitForSecondsRealtime(0.5f);
+
+            if (modern != null)
+            {
+                var change = pause.GetComponentsInChildren<Button>(true).FirstOrDefault(b => b.GetComponent<Text>()?.text == "Change Stage");
+                change?.onClick.Invoke();
+                yield return new WaitForSecondsRealtime(1f);
+                DumpUi(gui.Pause.transform, tag + "_stages");
+                yield return ShotScrolls($"{tag}_11_change_stage");
+                var tile = FindObjectsOfType<Button>().FirstOrDefault(b => b.transform.parent != null && b.transform.parent.name == "Content" && b.name.StartsWith("KK"));
+                tile = tile ?? FindObjectsOfType<Button>().FirstOrDefault(b => b.transform.parent != null && b.transform.parent.name == "Content");
+                tile?.onClick.Invoke();
+                yield return new WaitForSecondsRealtime(0.8f);
+                yield return Shot($"{tag}_12_change_stage_confirm");
+                foreach (var box in FindObjectsOfType<UiMessageBox>())
+                    box.Close();
+                pause.CloseIfOpen();
+                yield return new WaitForSecondsRealtime(0.5f);
+            }
+
+            // Visit a Koikatsu map so its square thumbnail gets taken, then look at the list again
+            var kk = loader.GetSceneList().FirstOrDefault(s => s.AssetData != null && s.Scene.StartsWith("KK - "));
+            if (modern != null && kk != null)
+            {
+                gui.ClosePauseMenu();
+                yield return new WaitForSecondsRealtime(0.5f);
+                op = loader.LoadScene(kk);
+                while (op != null && !op.isDone)
+                    yield return null;
+                yield return new WaitForSecondsRealtime(10f);
+                yield return Shot($"{tag}_13_kk_map");
+                gui = FindObjectOfType<SizeboxUI.GuiManager>();
+                gui.OpenPauseMenu();
+                yield return new WaitForSecondsRealtime(1f);
+                yield return Shot($"{tag}_14_kk_pause");
+                gui.Pause.GetComponentsInChildren<Button>(true).FirstOrDefault(b => b.GetComponent<Text>()?.text == "Change Stage")?.onClick.Invoke();
+                yield return new WaitForSecondsRealtime(1f);
+                var search = FindObjectOfType<UI.StagePicker>()?.GetComponentInChildren<InputField>();
+                if (search != null)
+                    search.text = "KK";
+                yield return new WaitForSecondsRealtime(0.5f);
+                yield return Shot($"{tag}_15_kk_thumbs");
+            }
+            yield return Shot($"{tag}_99_done");
+            Plugin.Log.LogInfo("[SelfTest] screenshot ui tour done");
+        }
+
+        private void DumpUi(Transform root, string name)
+        {
+            var sb = new System.Text.StringBuilder();
+            void Walk(Transform t, int depth)
+            {
+                if (!t.gameObject.activeInHierarchy || depth > 12)
+                    return;
+                var rt = t as RectTransform;
+                string line = new string(' ', depth * 2) + t.name + (rt != null ? $" [{rt.rect.width:0}x{rt.rect.height:0} anchors {rt.anchorMin}-{rt.anchorMax}]" : "");
+                foreach (var c in t.GetComponents<Component>())
+                {
+                    switch (c)
+                    {
+                        case Text tx: line += $" Text('{(tx.text.Length > 24 ? tx.text.Substring(0, 24) : tx.text)}' font={tx.font?.name} size={tx.fontSize} style={tx.fontStyle} align={tx.alignment} col={ColorUtility.ToHtmlStringRGBA(tx.color)})"; break;
+                        case Image im: line += $" Image(sprite={im.sprite?.name} type={im.type} col={ColorUtility.ToHtmlStringRGBA(im.color)})"; break;
+                        case GridLayoutGroup g: line += $" Grid(cell={g.cellSize} spacing={g.spacing} pad={g.padding.left},{g.padding.top} cons={g.constraint}/{g.constraintCount})"; break;
+                        case HorizontalOrVerticalLayoutGroup l: line += $" {l.GetType().Name}(spacing={l.spacing})"; break;
+                        case LayoutElement le: line += $" LE(pref={le.preferredWidth}x{le.preferredHeight} min={le.minHeight})"; break;
+                        case ContentSizeFitter: line += " Fitter"; break;
+                        case ScrollRect: line += " ScrollRect"; break;
+                        case Canvas cv: line += $" Canvas(order={cv.sortingOrder})"; break;
+                        case CanvasScaler cs: line += $" Scaler({cs.uiScaleMode} ref={cs.referenceResolution})"; break;
+                        case Selectable se: line += $" {se.GetType().Name}"; break;
+                        case Outline: line += " Outline"; break;
+                        case Shadow: line += " Shadow"; break;
+                    }
+                }
+                sb.AppendLine(line);
+                foreach (Transform ch in t)
+                    Walk(ch, depth + 1);
+            }
+            Transform top = root;
+            while (top.parent != null)
+                top = top.parent;
+            Walk(top, 0);
+            File.WriteAllText(Path.Combine(OutDir, $"ui_dump_{name}.txt"), sb.ToString());
+        }
+
+        // Screenshot, and if there is a scroll view, also at the bottom.
+        private IEnumerator ShotScrolls(string name)
+        {
+            yield return Shot(name);
+            ScrollRect scroll = null;
+            try
+            {
+                scroll = FindObjectsOfType<ScrollRect>()
+                    .Where(s => s.isActiveAndEnabled && s.content != null && s.content.rect.height > ((RectTransform)(s.viewport != null ? s.viewport : s.transform)).rect.height + 5f)
+                    .OrderByDescending(s => s.content.rect.height).FirstOrDefault();
+            }
+            catch (System.Exception e)
+            {
+                Plugin.Log.LogWarning("[SelfTest] scroll lookup: " + e.Message);
+            }
+            if (scroll != null)
+            {
+                scroll.verticalNormalizedPosition = 0f;
+                yield return new WaitForSecondsRealtime(0.4f);
+                yield return Shot(name + "_bottom");
+            }
+        }
+
         private static void SetInput(NewPlayerMicroController c, float h, float v)
         {
             Traverse.Create(c).Field("horizontalInput").SetValue(h);
@@ -731,7 +922,7 @@ namespace SizeboxTweaks
             yield return new WaitForEndOfFrame();
             string path = Path.Combine(OutDir, name + ".png");
             ScreenCapture.CaptureScreenshot(path);
-            yield return new WaitForSeconds(1f);
+            yield return new WaitForSecondsRealtime(1f);
             Plugin.Log.LogInfo($"[SelfTest] screenshot {path}");
         }
 

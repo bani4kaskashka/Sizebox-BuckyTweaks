@@ -13,6 +13,23 @@ Got Koikatsu or Koikatsu Sunshine installed? **Every one of its maps is now a Si
 
 Installs that registered themselves are found automatically. Repacks often aren't: set `KoikatsuFolder` / `KoikatsuSunshineFolder` in F1 to the game folder (the one with `abdata` in it) and restart.
 
+## Menus that don't look like 2009
+
+Every menu got redone. One font, dark cards, everything lined up, way less clutter.
+
+- **Pause menu** is short now and the game blurs behind it.
+- **Settings** is one window with tabs: Game, Video, Lighting, Audio, Controls.
+- **Change Stage** right from the pause menu. Search, pick, confirm, done.
+- **Video** tells you what you're really running on (DX12, DX11 or Vulkan) and switches it for you with one restart.
+- **Koikatsu stages** get a square picture of the map the first time you visit.
+
+![Pause menu before and after](screenshots/ui_pause.png)
+![Settings before and after](screenshots/ui_settings.png)
+![Video system info before and after](screenshots/ui_video_system.png)
+![Change stage](screenshots/ui_change_stage.png)
+
+Don't like it? `UI > ModernMenus = false` in F1 brings the old menus back.
+
 ## Fixes
 
 - **Less slidey movement.** Starting, stopping and turning are snappy now, no ice skating.
@@ -23,7 +40,7 @@ Installs that registered themselves are found automatically. Repacks often aren'
 
 Everything can be tweaked in game with F1.
 
-Driver timeouts or crashes? Set `Graphics > GraphicsApi` to `Vulkan` in F1. The game restarts itself once on Vulkan. A bit slower than DX12 on my card, but it didn't crash.
+Driver timeouts or crashes? Pick Vulkan in Settings > Video > Graphics API (or `Graphics > GraphicsApi` in F1). The game restarts itself once on Vulkan. A bit slower than DX12 on my card, but it didn't crash.
 
 ![Heights before and after](screenshots/heights_before_after.png)
 

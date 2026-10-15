@@ -73,8 +73,7 @@ namespace SizeboxTweaks
                         AbData = abdata,
                         Thumb = Path.Combine(CacheDir, $"{game}_{id}.png")
                     };
-                    if (!File.Exists(e.Thumb))
-                        WritePlaceholderThumb(e.Thumb, game == "KK" ? new Color(0.85f, 0.45f, 0.55f) : new Color(0.35f, 0.6f, 0.85f));
+                    MakeSquareThumb(e.Thumb, game == "KK" ? new Color(0.85f, 0.45f, 0.55f) : new Color(0.35f, 0.6f, 0.85f));
                     ByBundle[bundle] = e;
                     yield return e;
                 }
@@ -83,7 +82,7 @@ namespace SizeboxTweaks
                     continue;
                 // Sideloader zipmod maps; they share one placeholder thumbnail until first visited.
                 string placeholder = Path.Combine(CacheDir, $"{game}mod_placeholder.png");
-                if (!File.Exists(placeholder))
+                if (PngSize(placeholder).x != PngSize(placeholder).y || !File.Exists(placeholder))
                     WritePlaceholderThumb(placeholder, game == "KK" ? new Color(0.75f, 0.55f, 0.35f) : new Color(0.4f, 0.7f, 0.5f));
                 IEnumerable<MapEntry> mods;
                 try
@@ -174,13 +173,60 @@ namespace SizeboxTweaks
             return char.ToUpperInvariant(id[0]) + id.Substring(1);
         }
 
+        // The stage select shows a square picture. Older thumbnails were 16:9: crop those to their
+        // middle square (they get re-shot at full size on the next visit), and write a square
+        // placeholder for maps never visited.
+        private static void MakeSquareThumb(string path, Color placeholder)
+        {
+            Vector2Int size = PngSize(path);
+            if (size.x > 0 && size.x == size.y)
+                return;
+            if (size.x > 0 && new FileInfo(path).Length > 20000)
+            {
+                var tex = new Texture2D(2, 2);
+                if (tex.LoadImage(File.ReadAllBytes(path)))
+                {
+                    int side = Mathf.Min(tex.width, tex.height);
+                    var sq = new Texture2D(side, side, TextureFormat.RGB24, false);
+                    sq.SetPixels(tex.GetPixels((tex.width - side) / 2, (tex.height - side) / 2, side, side));
+                    sq.Apply();
+                    File.WriteAllBytes(path, sq.EncodeToPNG());
+                    UnityEngine.Object.Destroy(sq);
+                    UnityEngine.Object.Destroy(tex);
+                    return;
+                }
+                UnityEngine.Object.Destroy(tex);
+            }
+            WritePlaceholderThumb(path, placeholder);
+        }
+
+        // Width and height from a PNG header, (0, 0) if the file is missing or not a PNG
+        internal static Vector2Int PngSize(string path)
+        {
+            try
+            {
+                if (!File.Exists(path))
+                    return Vector2Int.zero;
+                var b = new byte[24];
+                using (var f = File.OpenRead(path))
+                    if (f.Read(b, 0, 24) < 24 || b[1] != (byte)'P' || b[2] != (byte)'N' || b[3] != (byte)'G')
+                        return Vector2Int.zero;
+                int Be(int o) => (b[o] << 24) | (b[o + 1] << 16) | (b[o + 2] << 8) | b[o + 3];
+                return new Vector2Int(Be(16), Be(20));
+            }
+            catch (IOException)
+            {
+                return Vector2Int.zero;
+            }
+        }
+
         private static void WritePlaceholderThumb(string path, Color c)
         {
-            var tex = new Texture2D(256, 144, TextureFormat.RGB24, false);
-            var px = new Color[256 * 144];
-            for (int y = 0; y < 144; y++)
+            var tex = new Texture2D(256, 256, TextureFormat.RGB24, false);
+            var px = new Color[256 * 256];
+            for (int y = 0; y < 256; y++)
                 for (int x = 0; x < 256; x++)
-                    px[y * 256 + x] = Color.Lerp(c * 0.55f, c, y / 143f);
+                    px[y * 256 + x] = Color.Lerp(c * 0.55f, c, y / 255f);
             tex.SetPixels(px);
             tex.Apply();
             File.WriteAllBytes(path, tex.EncodeToPNG());
@@ -570,33 +616,74 @@ namespace SizeboxTweaks
             go.AddComponent<PlayerSpawnPoint>();
         }
 
-        // First visit: replace the placeholder thumbnail with a picture of the map.
-        internal static IEnumerator CaptureThumb(MapEntry e)
+        private const int ThumbSize = 512;
+
+        // First visit: replace the placeholder thumbnail with a square picture of the map, taken
+        // from the game cameras (far camera with the sky first, then the near one) without the
+        // menus or the player in it. Shown in the stage select from then on.
+        internal static IEnumerator CaptureThumb(MapEntry e, SceneLoader loader)
         {
-            if (e == null || (File.Exists(e.Thumb) && new FileInfo(e.Thumb).Length > 20000))
+            if (e == null)
+                yield break;
+            Vector2Int have = PngSize(e.Thumb);
+            if (have.x >= ThumbSize && have.x == have.y)
                 yield break;
             yield return new WaitForSeconds(4f);
             yield return new WaitForEndOfFrame();
-            Camera cam = Camera.main;
-            if (cam == null)
+
+            int ui = LayerMask.NameToLayer("UI");
+            int player = LayerMask.NameToLayer("Player");
+            Camera[] cams = Camera.allCameras
+                .Where(c => c.enabled && c.targetTexture == null && c.cullingMask != 0 && (ui < 0 || c.cullingMask != 1 << ui))
+                .OrderBy(c => c.depth).ToArray();
+            if (cams.Length == 0)
                 yield break;
-            // Render the game camera alone so the menus are not in the picture.
-            const int w = 320, h = 180;
-            var rt = RenderTexture.GetTemporary(w, h, 24);
-            RenderTexture old = cam.targetTexture;
-            cam.targetTexture = rt;
-            cam.Render();
-            cam.targetTexture = old;
+
+            var rt = RenderTexture.GetTemporary(ThumbSize, ThumbSize, 24);
+            foreach (Camera cam in cams)
+            {
+                RenderTexture oldTarget = cam.targetTexture;
+                int oldMask = cam.cullingMask;
+                float oldFov = cam.fieldOfView;
+                cam.targetTexture = rt;
+                cam.aspect = 1f;
+                if (player >= 0)
+                    cam.cullingMask &= ~(1 << player);
+                if (!cam.orthographic)
+                    cam.fieldOfView = Mathf.Max(oldFov, 70f);
+                try
+                {
+                    cam.Render();
+                }
+                finally
+                {
+                    cam.targetTexture = oldTarget;
+                    cam.cullingMask = oldMask;
+                    cam.fieldOfView = oldFov;
+                    cam.ResetAspect();
+                }
+            }
             RenderTexture prev = RenderTexture.active;
             RenderTexture.active = rt;
-            var small = new Texture2D(w, h, TextureFormat.RGB24, false);
-            small.ReadPixels(new Rect(0, 0, w, h), 0, 0);
-            small.Apply();
+            var tex = new Texture2D(ThumbSize, ThumbSize, TextureFormat.RGB24, false);
+            tex.ReadPixels(new Rect(0, 0, ThumbSize, ThumbSize), 0, 0);
+            tex.Apply();
             RenderTexture.active = prev;
             RenderTexture.ReleaseTemporary(rt);
-            File.WriteAllBytes(e.Thumb, small.EncodeToPNG());
-            UnityEngine.Object.Destroy(small);
+            File.WriteAllBytes(e.Thumb, tex.EncodeToPNG());
+            e.ListThumb = null;
             Plugin.Log.LogInfo($"Saved thumbnail for {e.Name}");
+
+            // The stage list loaded its pictures once; swap this one in so it shows without a restart
+            var scenes = Traverse.Create(loader).Field("_allScenes").GetValue<List<SceneLoader.SceneInfo>>();
+            SceneLoader.SceneInfo info = scenes?.FirstOrDefault(s => s.AssetData != null && string.Equals(s.AssetData.Path, e.Bundle, StringComparison.OrdinalIgnoreCase));
+            if (info != null)
+            {
+                info.AssetData.Thumbnail = e.Thumb;
+                info.Thumbnail = Sprite.Create(tex, new Rect(0, 0, ThumbSize, ThumbSize), new Vector2(0.5f, 0.5f));
+            }
+            else
+                UnityEngine.Object.Destroy(tex);
         }
     }
 
@@ -708,7 +795,7 @@ namespace SizeboxTweaks
             {
                 Plugin.Log.LogError("Koikatsu map material fix failed: " + ex);
             }
-            __instance.StartCoroutine(KoikatsuMaps.CaptureThumb(e));
+            __instance.StartCoroutine(KoikatsuMaps.CaptureThumb(e, __instance));
         }
     }
 }

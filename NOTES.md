@@ -148,3 +148,15 @@ Results go to `BepInEx/selftest/` and the log. Leave it `Off` for normal play.
 - **Main menu** shows "Bucky Tweaks Version: x" in the bottom-left corner.
 - **Graphics API.** The build ships Vulkan, DX11 and OpenGL shaders as well as DX12, so `-force-vulkan` works natively (DXVK can't help: it doesn't do DX12). `GraphicsApi` restarts the game once with the flag. The DOORSTOP_* environment variables are cleared for the child process, otherwise BepInEx skips loading in it. KK Park, uncapped: DX12 1067 fps average, Vulkan 793. The driver timeouts during testing all happened on DX12 while other Unity processes were using the GPU.
 - **BepInEx.cfg.** The plugin turns `HideManagerGameObject` on by itself; a restart is needed for F1.
+
+## Menus (1.2.0)
+
+Turn it all off with `[UI] ModernMenus = false`; the blur alone with `BlurPauseBackground`.
+
+- **One look.** Every Sizebox settings window is the same `SettingsMenu` prefab: a title, a 500x450 scroll box and 400x27 rows in three fonts (SF Atarian, two OpenSans weights). `SettingsSkin` (postfix on `Pause.SettingsView.Awake`) turns it into a 640x470 dark card: labels on the left, every control lined up on the right, OpenSans only, slim sliders, small value boxes. Rounded sprites are made at runtime, nothing is shipped.
+- **Pause menu.** Resume, Save, Settings, Change Stage, Restart, Main Menu, Quit. Video, Lighting, Audio and Controls are tabs of Settings (each tab calls the game's own `PauseView.On*Click`, so the windows themselves are the game's). The list hides while a window is open.
+- **Blur.** On pause the menu stays invisible for one frame, the screen is grabbed with `ScreenCapture.CaptureScreenshotIntoRenderTexture` and bounced down 5 halvings and up 2 with bilinear filtering. The texture is released when the menu closes.
+- **Change Stage.** Every entry of `SceneLoader.GetSceneList()` (built in, custom, Koikatsu) as a tile with a search box. Yes on the prompt unpauses and calls `SceneLoader.LoadScene`, the same path as Restart.
+- **Video > System.** The game's build/system/feature rows become one list. "Running on" reads `SystemInfo.graphicsDeviceType`, so it says what is really in use. The Graphics API picker writes the config and offers to restart now (strips old `-force-*` flags, adds the new one).
+- **Prompts** (restart, quit, change stage) get the same card style.
+- **Koikatsu thumbnails** are now 512x512, rendered from every game camera in depth order (sky included) with the player layer hidden. Old 16:9 ones are cropped to a square at startup and re-shot on the next visit. The new picture replaces the cached sprite, so the list shows it without a restart.

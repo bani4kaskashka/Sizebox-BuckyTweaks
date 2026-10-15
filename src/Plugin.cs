@@ -24,7 +24,8 @@ namespace SizeboxTweaks
         Movement,
         Drift,
         Menu,
-        Stairs
+        Stairs,
+        UiTour
     }
 
     [BepInPlugin(Guid, Name, Version)]
@@ -32,7 +33,7 @@ namespace SizeboxTweaks
     {
         public const string Guid = "sizebox.tweaks";
         public const string Name = "Bucky Tweaks";
-        public const string Version = "1.1.0";
+        public const string Version = "1.2.0";
 
         internal static ManualLogSource Log;
 
@@ -52,6 +53,10 @@ namespace SizeboxTweaks
         internal static ConfigEntry<float> GtsSpeedChange;
         internal static ConfigEntry<float> GtsTurnSpeed;
         internal static ConfigEntry<float> GtsSpeedMultiplier;
+
+        // UI
+        internal static ConfigEntry<bool> UiEnabled;
+        internal static ConfigEntry<bool> UiBlur;
 
         // Height
         internal static ConfigEntry<HeightMode> Height;
@@ -110,6 +115,9 @@ namespace SizeboxTweaks
             Graphics = Config.Bind("Graphics", "GraphicsApi", GraphicsChoice.Default,
                 "Which graphics API the game runs on. Default = the game's own (DirectX 12). Vulkan/DirectX11 can help with driver timeouts " +
                 "or speed on some cards. Takes effect by restarting the game once, automatically.");
+            UiEnabled = Config.Bind("UI", "ModernMenus", true,
+                "One font, compact settings windows, a shorter pause menu with Settings tabs and a Change Stage button. Off = the game's own menus.");
+            UiBlur = Config.Bind("UI", "BlurPauseBackground", true, "Blur the game behind the pause menu.");
             Height = Config.Bind("Height", "Mode", HeightMode.Body,
                 "How a character's real height is measured when it spawns. Body = top of the head skin, ignores hair/ears/hats " +
                 "(matches the height you type in). AllMesh = top of anything (hair, hats). Vanilla = the game's bounding box (wrong for most models). " +
