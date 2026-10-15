@@ -1,13 +1,25 @@
 # Bucky Tweaks
 
-A BepInEx plugin for Sizebox 3.02 that fixes stuff that bugged me.
+A BepInEx plugin for Sizebox 3.02 that fixes stuff that bugged me, and plugs Koikatsu into it.
+
+## Koikatsu maps in Sizebox
+
+Got Koikatsu or Koikatsu Sunshine installed? **Every one of its maps is now a Sizebox stage.** No converting, no exporting, no Unity. Bucky Tweaks finds the game and loads the maps straight from its folder.
+
+- **All the base maps.** The school, park, beach, hotel, aquarium and the rest, from both KK and KKS.
+- **Your mod maps too.** Sideloader zipmods in `mods/` just show up. My install went from 7 stages to 540.
+- **Actually playable.** Walk, climb stairs, stand on desks and benches, go giant without getting stuck on trees.
+- **Nothing gets copied.** Uninstall KK and the stages simply disappear.
+
+Installs that registered themselves are found automatically. Repacks often aren't: set `KoikatsuFolder` / `KoikatsuSunshineFolder` in F1 to the game folder (the one with `abdata` in it) and restart.
+
+## Fixes
 
 - **Less slidey movement.** Starting, stopping and turning are snappy now, no ice skating.
 - **Real heights.** A character set to 180 cm is actually 180 cm tall. The game measured a box around the model, hair and hats included.
 - **Normal jump.** About 50 cm instead of jumping over your own head.
 - **Stairs.** Walks up steps and stair ramps.
 - **Faster giantesses.** 2x by default, because big ones crawl.
-- **Koikatsu maps.** Every Koikatsu and Koikatsu Sunshine map shows up in Stage Select, mod maps included. Loaded straight from your KK folder, nothing copied.
 
 Everything can be tweaked in game with F1.
 
@@ -22,7 +34,7 @@ Driver timeouts or crashes? Set `Graphics > GraphicsApi` to `Vulkan` in F1. The 
 3. Optional, for the F1 menu: [ConfigurationManager](https://github.com/BepInEx/BepInEx.ConfigurationManager/releases) (the BepInEx5 one), same folder.
 4. Start the game twice. The first run sets BepInEx up.
 
-Koikatsu maps: if your KK isn't found on its own, set `KoikatsuFolder` / `KoikatsuSunshineFolder` in F1 (or in `BepInEx/config/sizebox.tweaks.cfg`).
+Koikatsu: if it isn't picked up, set the game folder in F1 (see above) or in `BepInEx/config/sizebox.tweaks.cfg`.
 
 To uninstall, delete `winhttp.dll` (turns off every mod) or the `BuckyTweaks` folder.
 
