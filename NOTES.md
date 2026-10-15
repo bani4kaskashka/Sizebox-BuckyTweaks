@@ -85,7 +85,7 @@ All 41 Koikatsu maps and 31 Koikatsu Sunshine maps appear in Stage Select as `KK
 - **Spawn point.** It adds a spawn point on the main floor near the map's origin.
 - **Thumbnail.** It saves a thumbnail the first time you visit a map.
 
-**Tested in game:** KK Park, KK classroom 1-1 and KKS Beach. All three load, render and are walkable, with characters at the right scale (see `screenshots/`). The other maps use the same code path but have not each been checked by eye.
+**Tested in game:** KK Park, KK classroom 1-1 and KKS Beach. All three load, render and are walkable, with characters at the right scale. The other maps use the same code path but have not each been checked by eye.
 
 **Giantesses on Koikatsu maps.** A giantess walks by pushing a large physics capsule, and that capsule collides with the "Map" layer. On Sizebox's own stages that layer is only the ground. On a Koikatsu map it holds every tree, hedge, lamp, bench, wall and desk, so the capsule gets wedged and knocked sideways. That is the "pulled to one side and can't move" bug.
 - With `GiantessWalksThroughProps` on (the default), giantesses only collide with flat floor colliders and walk through everything else. Micros still collide with everything.
@@ -112,7 +112,7 @@ Maps from sideloader zipmods in each game's `mods` folder are listed too, as `KK
 - **Same fix-ups as vanilla maps** (layers, lights, colliders, materials, spawn point, thumbnail). Most mod maps have few colliders, so `AddMissingColliders` matters most here.
 - **One mod map open at a time.** The KK and KKS builds of a map share internal file names, and Unity will not open both, so switching mod maps closes the previous bundle.
 - **Start-up cost.** The first start reads every zipmod's file list, about 40 s for 5,500 KK zipmods on a hard disk. After that the result is cached in `kkmaps/zipmod_index_KK.txt` / `_KKS.txt` and the scan takes about 0.2 s. Only new or changed zipmods are read again.
-- **Tested in game** with the Heights self test (Unity-chan and a KK student at 1.65 m): KK mod Pool, KK mod `[PDHM] Paris`, KKS mod `Classroom v2` (from a 10-map pack) and KKS mod `[Ruine02] TrailblazerRoom` (the one deflated zipmod). All four load and render, and the characters stand on the floor at true height. Paris shipped with no colliders at all and Classroom v2 with 2; the plugin added 241 and 166. Screenshots: `screenshots/modmap_*.png`. Indoor mod maps can look dim, because only Sizebox's sun and sky light them.
+- **Tested in game** with the Heights self test (Unity-chan and a KK student at 1.65 m): KK mod Pool, KK mod `[PDHM] Paris`, KKS mod `Classroom v2` (from a 10-map pack) and KKS mod `[Ruine02] TrailblazerRoom` (the one deflated zipmod). All four load and render, and the characters stand on the floor at true height. Paris shipped with no colliders at all and Classroom v2 with 2; the plugin added 241 and 166. Indoor mod maps can look dim, because only Sizebox's sun and sky light them.
 - **Left out:** maps whose scene bundle was repacked by hand (a `CAB-...` file instead of Unity's `BuildPlayer-<scene>.sharedAssets`). Koikatsu's Unity 5.6 opens them but Unity 2022 cannot, and says the scene "has not been added to the build settings". In this install that is `[Among Us] The Skeld` and `[Splatoon 2] Abandoned Station`. The log names them at start-up.
 
 **Known limits:**
