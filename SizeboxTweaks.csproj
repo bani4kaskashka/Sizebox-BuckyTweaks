@@ -17,8 +17,6 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
-    <!-- assets/ holds Unity Editor scripts for the SDK project, not plugin code -->
-    <Compile Remove="assets\**" />
   </ItemGroup>
 
   <ItemGroup>
