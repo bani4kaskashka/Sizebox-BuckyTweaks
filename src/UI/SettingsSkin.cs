@@ -130,7 +130,13 @@ namespace SizeboxTweaks.UI
             Text label = texts.FirstOrDefault(t => t.name == "Label" && t.GetComponentInParent<Selectable>() == (rowToggle as Selectable))
                          ?? texts.FirstOrDefault(t => t.GetComponentInParent<Selectable>() == null || t.GetComponentInParent<Selectable>() == rowToggle);
 
-            if (kind == "ReadOnly" || kind == "ReadOnlyPath")
+            if (kind.Contains("Path"))
+            {
+                StylePath(row, label);
+                return;
+            }
+
+            if (kind == "ReadOnly")
             {
                 // Title on the left, value on the right
                 Text value = texts.FirstOrDefault(t => t != label);
@@ -164,7 +170,10 @@ namespace SizeboxTweaks.UI
                     Right(rowToggle.targetGraphic.rectTransform, 2f, 18f, 18f);
             }
 
-            float x = 0f;
+            // Toggle + slider rows: the row itself is the toggle, its box sits at the right edge,
+            // so the slider starts left of it
+            bool boxed = rowToggle != null && controls.Count > 0;
+            float x = boxed ? 18f + Gap + 4f : 0f;
             bool pair = controls.Count >= 2;
             // Placed from the right edge leftwards; a value box goes right of its slider
             controls = controls.OrderBy(c => c.GetComponent<InputField>() != null ? 1 : 0).ToList();
@@ -186,6 +195,8 @@ namespace SizeboxTweaks.UI
                     else
                         w = (ControlWidth - Gap) / 2f + 40f; // two key binding buttons
                 }
+                if (boxed && slider != null)
+                    w = ControlWidth - x;
                 if (toggle != null && c != (RectTransform)row)
                 {
                     Skin.Toggle(toggle);
@@ -218,6 +229,63 @@ namespace SizeboxTweaks.UI
                 foreach (Text t in texts.Where(t => t != label))
                     Skin.Text(t, Skin.Regular, 13, Skin.TextDim);
             }
+        }
+
+        // Path rows: title, a field box with the path in it, and View/Browse buttons on the right.
+        // The game keeps the text as a separate child sticking out of the box; put it inside.
+        private static void StylePath(Transform row, Text label)
+        {
+            if (label != null)
+            {
+                Skin.Text(label, Skin.Semibold, 14, Skin.TextMain, TextAnchor.MiddleLeft);
+                Left(label.rectTransform, 0f, 150f);
+            }
+            float right = 0f;
+            foreach (Button b in row.GetComponentsInChildren<Button>(true).Reverse())
+            {
+                if (b.transform.parent != row)
+                    continue;
+                Skin.Button(b);
+                foreach (Text t in b.GetComponentsInChildren<Text>(true))
+                    Skin.Text(t, Skin.Semibold, 12, Skin.TextMain, TextAnchor.MiddleCenter);
+                Right((RectTransform)b.transform, right, 60f, 24f);
+                right += 60f + Gap;
+            }
+            InputField input = row.GetComponentInChildren<InputField>(true);
+            Transform box = input != null ? (input.transform.parent != row ? input.transform.parent : input.transform) : null;
+            if (box == null)
+                return;
+            var boxRt = (RectTransform)box;
+            boxRt.anchorMin = boxRt.anchorMax = new Vector2(0f, 0.5f);
+            boxRt.pivot = new Vector2(0f, 0.5f);
+            boxRt.anchoredPosition = new Vector2(160f, 0f);
+            boxRt.sizeDelta = new Vector2(CardWidth - Pad * 2f - 160f - right, 24f);
+            Skin.Panel(box.GetComponent<Image>(), Skin.Field, true);
+            if (box.GetComponent<RectMask2D>() == null)
+                box.gameObject.AddComponent<RectMask2D>();
+            foreach (RectTransform child in box)
+            {
+                child.anchorMin = Vector2.zero;
+                child.anchorMax = Vector2.one;
+                child.pivot = new Vector2(0.5f, 0.5f);
+                child.offsetMin = new Vector2(8f, 0f);
+                child.offsetMax = new Vector2(-8f, 0f);
+            }
+            if (input.textComponent != null)
+            {
+                Text value = input.textComponent;
+                Skin.Text(value, Skin.Regular, 12, Skin.TextDim);
+                value.horizontalOverflow = HorizontalWrapMode.Overflow;
+                // long paths: show the end (the folder name), short ones from the left
+                float room = boxRt.sizeDelta.x - 16f;
+                value.alignment = value.preferredWidth > room ? TextAnchor.MiddleRight : TextAnchor.MiddleLeft;
+            }
+            if (input.placeholder is Text ph)
+            {
+                Skin.Text(ph, Skin.Regular, 12, Skin.TextDim, TextAnchor.MiddleLeft);
+                ph.fontStyle = FontStyle.Italic;
+            }
+            input.selectionColor = Skin.AccentDim;
         }
 
         private static void Left(RectTransform rt, float x, float width)

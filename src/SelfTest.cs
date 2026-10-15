@@ -569,6 +569,18 @@ namespace SizeboxTweaks
         private IEnumerator UiTour(SceneLoader loader)
         {
             string tag = string.IsNullOrEmpty(Plugin.TestModels.Value) ? "ui" : Plugin.TestModels.Value;
+            if (tag.StartsWith("edit"))
+            {
+                yield return EditTour(loader, tag);
+                Plugin.Log.LogInfo("[SelfTest] screenshot ui tour done");
+                yield break;
+            }
+            if (tag == "probe")
+            {
+                yield return UiProbe(loader);
+                Plugin.Log.LogInfo("[SelfTest] screenshot ui tour done");
+                yield break;
+            }
 
             // Main menu settings
             MenuController menu = FindObjectOfType<MenuController>();
@@ -687,17 +699,191 @@ namespace SizeboxTweaks
             Plugin.Log.LogInfo("[SelfTest] screenshot ui tour done");
         }
 
-        private void DumpUi(Transform root, string name)
+        // The in-game edit controls: spawn a micro, select it, open every edit view and screenshot.
+        private IEnumerator EditTour(SceneLoader loader, string tag)
+        {
+            var stage = loader.GetSceneList().First(s => s.Scene == "Island_SBE");
+            AsyncOperation op = loader.LoadScene(stage);
+            while (op != null && !op.isDone)
+                yield return null;
+            while (GameController.Instance == null || GameController.LocalClient == null)
+                yield return new WaitForSecondsRealtime(0.5f);
+            yield return new WaitForSecondsRealtime(4f);
+
+            AssetManager am = AssetManager.Instance;
+            var asset = am.GetFemaleMicroAssetNames().Select(n => am.GetAssetDescriptionByName(n)).FirstOrDefault(a => a != null);
+            Transform cam = Camera.main.transform;
+            Vector3 pos = cam.position + cam.forward.Flatten().normalized * 4f;
+            if (Physics.Raycast(pos + Vector3.up * 50f, Vector3.down, out RaycastHit hit, 500f, Layers.walkableMask))
+                pos = hit.point;
+            EntityBase spawned = null;
+            if (asset != null)
+                GameController.LocalClient.SpawnMicro(asset, pos, Quaternion.LookRotation(-cam.forward.Flatten().normalized), 1f, e => spawned = e);
+            float waited = 0f;
+            while (spawned == null && waited < 20f) { waited += 0.5f; yield return new WaitForSecondsRealtime(0.5f); }
+            yield return new WaitForSecondsRealtime(1.5f);
+
+            var gui = SizeboxUI.GuiManager.Instance;
+            if (spawned != null)
+                gui.InterfaceControl.SetSelectedObject(spawned);
+            var edit = gui.EditMode;
+            yield return new WaitForSecondsRealtime(1f);
+            yield return Shot($"{tag}_00_edit");
+            DumpUi(edit.transform, tag + "_editmode", true);
+
+            var views = new (string name, System.Action open)[]
+            {
+                ("scene", () => edit.OnSceneClick()),
+                ("macro", () => edit.OnCatalogClick(CatalogCategory.Giantess)),
+                ("objects", () => edit.OnCatalogClick(CatalogCategory.Object)),
+                ("transform", () => edit.OnTransformClick()),
+                ("animation", () => edit.OnAnimationClick()),
+                ("pose", () => edit.OnPoseClick()),
+                ("morphs", () => edit.OnMorphsClick()),
+                ("model", () => edit.OnCharacterClick()),
+            };
+            int n = 1;
+            foreach (var v in views)
+            {
+                try { v.open(); }
+                catch (System.Exception e) { Plugin.Log.LogWarning($"[SelfTest] edit {v.name}: {e.InnerException?.Message ?? e.Message}"); }
+                yield return new WaitForSecondsRealtime(1f);
+                yield return Shot($"{tag}_{n:00}_{v.name}");
+                n++;
+            }
+            DumpUi(edit.transform, tag + "_editmode_after", true);
+        }
+
+        // Clicks through the menus like a player would (pointer clicks, in play mode) and logs the
+        // cursor after every step; dumps the dropdown list and the Content path rows.
+        private IEnumerator UiProbe(SceneLoader loader)
+        {
+            void LogCursor(string step) => Plugin.Log.LogInfo($"[SelfTest] cursor after {step}: visible={Cursor.visible} lock={Cursor.lockState}");
+            void Click(Component c)
+            {
+                if (c == null) { Plugin.Log.LogWarning("[SelfTest] probe: nothing to click"); return; }
+                var es = UnityEngine.EventSystems.EventSystem.current;
+                var data = new UnityEngine.EventSystems.PointerEventData(es) { button = UnityEngine.EventSystems.PointerEventData.InputButton.Left };
+                UnityEngine.EventSystems.ExecuteEvents.Execute(c.gameObject, data, UnityEngine.EventSystems.ExecuteEvents.pointerDownHandler);
+                UnityEngine.EventSystems.ExecuteEvents.Execute(c.gameObject, data, UnityEngine.EventSystems.ExecuteEvents.pointerUpHandler);
+                UnityEngine.EventSystems.ExecuteEvents.Execute(c.gameObject, data, UnityEngine.EventSystems.ExecuteEvents.pointerClickHandler);
+            }
+            Button ByText(Transform root, string text) => root.GetComponentsInChildren<Button>(false)
+                .FirstOrDefault(b => b.GetComponentInChildren<Text>(true)?.text == text);
+
+            MenuController menu = FindObjectOfType<MenuController>();
+            if (menu != null)
+            {
+                AccessTools.Method(typeof(MenuController), "OnSettingsClick").Invoke(menu, null);
+                yield return new WaitForSecondsRealtime(1f);
+                var mms = FindObjectOfType<SizeboxUI.MainMenuSettingsView>();
+                Click(ByText(mms.transform, "Content"));
+                yield return new WaitForSecondsRealtime(1f);
+                yield return Shot("probe_01_content");
+                DumpUi(mms.transform, "probe_content");
+                Click(ByText(mms.transform, "Video"));
+                yield return new WaitForSecondsRealtime(1f);
+                var dd = mms.GetComponentsInChildren<Dropdown>().FirstOrDefault();
+                if (dd != null)
+                {
+                    DumpUi(dd.transform, "probe_dropdown", true);
+                    dd.Show();
+                }
+                yield return new WaitForSecondsRealtime(0.8f);
+                yield return Shot("probe_02_main_dropdown");
+                var list = GameObject.Find("Dropdown List");
+                if (list != null)
+                    DumpUi(list.transform, "probe_dropdown_list", true);
+                dd?.Hide();
+                yield return new WaitForSecondsRealtime(0.5f);
+                foreach (var v in FindObjectsOfType<SizeboxUI.MainMenuSettingsView>())
+                    v.gameObject.SetActive(false);
+            }
+
+            var stage = loader.GetSceneList().First(s => s.Scene == "Island_SBE");
+            AsyncOperation op = loader.LoadScene(stage);
+            while (op != null && !op.isDone)
+                yield return null;
+            while (GameController.Instance == null || GameController.LocalClient == null)
+                yield return new WaitForSecondsRealtime(0.5f);
+            yield return new WaitForSecondsRealtime(4f);
+            var gui = FindObjectOfType<SizeboxUI.GuiManager>();
+            gui.ToggleEditMode();
+            yield return new WaitForSecondsRealtime(1.5f);
+            LogCursor("play mode");
+            gui.OpenPauseMenu();
+            yield return new WaitForSecondsRealtime(1f);
+            LogCursor("pause");
+            var pause = gui.Pause;
+            Click(ByText(pause.transform, "Settings"));
+            yield return new WaitForSecondsRealtime(1f);
+            LogCursor("settings");
+            foreach (string tab in new[] { "Video", "Lighting", "Audio", "Controls", "Game", "Video" })
+            {
+                Click(ByText(pause.transform, tab));
+                yield return new WaitForSecondsRealtime(0.8f);
+                LogCursor("tab " + tab);
+            }
+            var toggle = pause.GetComponentsInChildren<Toggle>().FirstOrDefault(t => t.GetComponentInParent<Dropdown>() == null);
+            Click(toggle);
+            yield return new WaitForSecondsRealtime(0.5f);
+            LogCursor("toggle");
+            yield return Shot("probe_03_toggle");
+            Click(toggle);
+            yield return new WaitForSecondsRealtime(0.5f);
+            var dd2 = pause.GetComponentsInChildren<Dropdown>().FirstOrDefault();
+            Click(dd2);
+            yield return new WaitForSecondsRealtime(0.8f);
+            LogCursor("dropdown open");
+            yield return Shot("probe_04_pause_dropdown");
+            dd2?.Hide();
+            yield return new WaitForSecondsRealtime(0.5f);
+            LogCursor("dropdown closed");
+            Click(ByText(pause.transform, "OK"));
+            yield return new WaitForSecondsRealtime(0.8f);
+            LogCursor("ok");
+            Click(ByText(pause.transform, "Change Stage"));
+            yield return new WaitForSecondsRealtime(1f);
+            LogCursor("change stage");
+            Click(ByText(pause.transform, "Back"));
+            yield return new WaitForSecondsRealtime(0.8f);
+            LogCursor("back");
+            Click(ByText(pause.transform, "Save"));
+            yield return new WaitForSecondsRealtime(0.8f);
+            LogCursor("save");
+            pause.CloseIfOpen();
+            yield return new WaitForSecondsRealtime(0.5f);
+            Click(ByText(pause.transform, "Restart"));
+            yield return new WaitForSecondsRealtime(0.8f);
+            LogCursor("restart prompt");
+            var box = FindObjectOfType<UiMessageBox>();
+            Click(box != null ? ByText(box.transform, "No") : null);
+            yield return new WaitForSecondsRealtime(0.8f);
+            LogCursor("prompt no");
+            Click(ByText(pause.transform, "Resume"));
+            yield return new WaitForSecondsRealtime(0.8f);
+            LogCursor("resume (hidden is right here)");
+            gui.OpenPauseMenu();
+            yield return new WaitForSecondsRealtime(1f);
+            LogCursor("pause again");
+            yield return Shot("probe_05_pause_again");
+        }
+
+        private void DumpUi(Transform root, string name, bool inactive = false)
         {
             var sb = new System.Text.StringBuilder();
             void Walk(Transform t, int depth)
             {
-                if (!t.gameObject.activeInHierarchy || depth > 12)
+                if ((!inactive && !t.gameObject.activeInHierarchy) || depth > 14)
                     return;
                 var rt = t as RectTransform;
-                string line = new string(' ', depth * 2) + t.name + (rt != null ? $" [{rt.rect.width:0}x{rt.rect.height:0} anchors {rt.anchorMin}-{rt.anchorMax}]" : "");
+                string line = new string(' ', depth * 2) + t.name + (t.gameObject.activeSelf ? "" : " (off)") + (rt != null ? $" [{rt.rect.width:0}x{rt.rect.height:0} anchors {rt.anchorMin}-{rt.anchorMax}]" : "");
                 foreach (var c in t.GetComponents<Component>())
                 {
+                    if (c is Toggle tg)
+                        line += $" [toggle target={tg.targetGraphic?.name} graphic={tg.graphic?.name}]";
+                    if (c is Dropdown dd)
+                        line += $" [dropdown template={dd.template?.name} caption={dd.captionText?.name} item={dd.itemText?.name}]";
                     switch (c)
                     {
                         case Text tx: line += $" Text('{(tx.text.Length > 24 ? tx.text.Substring(0, 24) : tx.text)}' font={tx.font?.name} size={tx.fontSize} style={tx.fontStyle} align={tx.alignment} col={ColorUtility.ToHtmlStringRGBA(tx.color)})"; break;
@@ -710,6 +896,9 @@ namespace SizeboxTweaks
                         case Canvas cv: line += $" Canvas(order={cv.sortingOrder})"; break;
                         case CanvasScaler cs: line += $" Scaler({cs.uiScaleMode} ref={cs.referenceResolution})"; break;
                         case Selectable se: line += $" {se.GetType().Name}"; break;
+                        case RawImage ri: line += $" RawImage(tex={ri.texture?.name} col={ColorUtility.ToHtmlStringRGBA(ri.color)})"; break;
+                        case Mask mk: line += $" Mask(show={mk.showMaskGraphic})"; break;
+                        case RectMask2D: line += " RectMask2D"; break;
                         case Outline: line += " Outline"; break;
                         case Shadow: line += " Shadow"; break;
                     }
@@ -719,7 +908,7 @@ namespace SizeboxTweaks
                     Walk(ch, depth + 1);
             }
             Transform top = root;
-            while (top.parent != null)
+            while (!inactive && top.parent != null)
                 top = top.parent;
             Walk(top, 0);
             File.WriteAllText(Path.Combine(OutDir, $"ui_dump_{name}.txt"), sb.ToString());
@@ -742,6 +931,9 @@ namespace SizeboxTweaks
             }
             if (scroll != null)
             {
+                scroll.verticalNormalizedPosition = 0.5f;
+                yield return new WaitForSecondsRealtime(0.4f);
+                yield return Shot(name + "_mid");
                 scroll.verticalNormalizedPosition = 0f;
                 yield return new WaitForSecondsRealtime(0.4f);
                 yield return Shot(name + "_bottom");

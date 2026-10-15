@@ -15,17 +15,19 @@ Installs that registered themselves are found automatically. Repacks often aren'
 
 ## Menus that don't look like 2009
 
-Every menu got redone. One font, dark cards, everything lined up, way less clutter.
+Every menu got redone. One font, everything lined up, way less clutter. Same gray as the game, so it still feels like Sizebox.
 
 - **Pause menu** is short now and the game blurs behind it.
 - **Settings** is one window with tabs: Game, Video, Lighting, Audio, Controls.
 - **Change Stage** right from the pause menu. Search, pick, confirm, done.
 - **Video** tells you what you're really running on (DX12, DX11 or Vulkan) and switches it for you with one restart.
 - **Koikatsu stages** get a square picture of the map the first time you visit.
+- **In-game controls** (bottom bar, catalog, transform, animation, pose, morphs) use the same font and controls.
 
 ![Pause menu before and after](screenshots/ui_pause.png)
 ![Settings before and after](screenshots/ui_settings.png)
 ![Video system info before and after](screenshots/ui_video_system.png)
+![In-game controls before and after](screenshots/ui_edit.png)
 ![Change stage](screenshots/ui_change_stage.png)
 
 Don't like it? `UI > ModernMenus = false` in F1 brings the old menus back.

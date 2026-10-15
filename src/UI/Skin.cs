@@ -9,16 +9,16 @@ namespace SizeboxTweaks.UI
     internal static class Skin
     {
         // Opaque on purpose: the game blends UI in linear space, where 90% alpha still looks see-through
-        internal static readonly Color Card = new Color32(22, 24, 30, 255);
-        internal static readonly Color CardSoft = new Color32(30, 33, 41, 255);
-        internal static readonly Color Field = new Color32(40, 44, 54, 255);
-        internal static readonly Color FieldHover = new Color32(52, 57, 70, 255);
-        internal static readonly Color Track = new Color32(58, 63, 76, 255);
+        internal static readonly Color Card = new Color32(66, 66, 66, 255); // the game's own menu gray
+        internal static readonly Color CardSoft = new Color32(74, 74, 74, 255);
+        internal static readonly Color Field = new Color32(86, 86, 86, 255);
+        internal static readonly Color FieldHover = new Color32(102, 102, 102, 255);
+        internal static readonly Color Track = new Color32(104, 104, 104, 255);
         internal static readonly Color Accent = new Color32(110, 150, 255, 255);
         internal static readonly Color AccentDim = new Color32(110, 150, 255, 70);
         internal static readonly Color TextMain = new Color32(232, 235, 242, 255);
-        internal static readonly Color TextDim = new Color32(160, 168, 184, 255);
-        internal static readonly Color TextHeader = new Color32(120, 158, 255, 255);
+        internal static readonly Color TextDim = new Color32(184, 184, 184, 255);
+        internal static readonly Color TextHeader = new Color32(140, 172, 255, 255);
         internal static readonly Color Danger = new Color32(240, 100, 100, 255);
 
         private static Font _regular, _semibold, _bold;
@@ -44,6 +44,39 @@ namespace SizeboxTweaks.UI
         internal static Sprite Rounded => _rounded ?? (_rounded = MakeRounded(32, 8));
         internal static Sprite RoundedSmall => _roundedSmall ?? (_roundedSmall = MakeRounded(16, 4));
         internal static Sprite Circle => _circle ?? (_circle = MakeRounded(32, 16, false));
+
+        // Accent square with a white tick, shown over the toggle box when it is on
+        internal static Sprite CheckOn => _checkOn ?? (_checkOn = MakeCheck());
+        private static Sprite _checkOn;
+
+        private static Sprite MakeCheck()
+        {
+            const int n = 32;
+            var tex = new Texture2D(n, n, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear };
+            var px = new Color32[n * n];
+            Color32 accent = Accent;
+            Vector2 a = new Vector2(8.5f, 16.5f), b = new Vector2(13.5f, 11f), c = new Vector2(23.5f, 21.5f);
+            float Seg(Vector2 p, Vector2 s0, Vector2 s1)
+            {
+                Vector2 d = s1 - s0;
+                float t = Mathf.Clamp01(Vector2.Dot(p - s0, d) / d.sqrMagnitude);
+                return Vector2.Distance(p, s0 + d * t);
+            }
+            for (int y = 0; y < n; y++)
+                for (int x = 0; x < n; x++)
+                {
+                    var p = new Vector2(x + 0.5f, y + 0.5f);
+                    float cx = Mathf.Clamp(p.x, 7f, n - 7f), cy = Mathf.Clamp(p.y, 7f, n - 7f);
+                    float box = Mathf.Clamp01(0.5f - (Vector2.Distance(p, new Vector2(cx, cy)) - 7f));
+                    float tick = Mathf.Clamp01(0.5f - (Mathf.Min(Seg(p, a, b), Seg(p, b, c)) - 1.9f));
+                    Color col = Color.Lerp(accent, Color.white, tick);
+                    col.a = box;
+                    px[y * n + x] = col;
+                }
+            tex.SetPixels32(px);
+            tex.Apply(false, true);
+            return Sprite.Create(tex, new Rect(0, 0, n, n), new Vector2(0.5f, 0.5f));
+        }
 
         // Small downward triangle for dropdowns
         internal static Sprite Chevron => _chevron ?? (_chevron = MakeChevron());
@@ -209,22 +242,7 @@ namespace SizeboxTweaks.UI
             if (d.itemText != null)
                 Text(d.itemText, Regular, 13, TextMain);
             if (d.template != null)
-            {
-                Panel(d.template.GetComponent<Image>(), Card);
-                foreach (var t in d.template.GetComponentsInChildren<Toggle>(true))
-                {
-                    var bg = t.targetGraphic as Image;
-                    if (bg != null)
-                        bg.color = new Color(0, 0, 0, 0);
-                    var colors = t.colors;
-                    colors.highlightedColor = FieldHover;
-                    colors.selectedColor = FieldHover;
-                    colors.normalColor = new Color(1, 1, 1, 0);
-                    t.colors = colors;
-                    if (t.graphic is Image check)
-                        check.color = Accent;
-                }
-            }
+                DropdownList(d);
             // The game's prefab draws a white underline (a slider fill) and has no arrow
             foreach (var line in d.GetComponentsInChildren<Image>(true).Where(i => i.transform.parent != null && i.transform.parent.name == "Fill Area"))
                 line.enabled = false;
@@ -249,6 +267,97 @@ namespace SizeboxTweaks.UI
             }
         }
 
+        // Sizebox's dropdown template is just the item toggle inside a bare object: no background
+        // and no scrolling, so long lists (resolutions) run over everything. Rebuild it the way
+        // Unity's own template is laid out: card > viewport > content > item.
+        private static void DropdownList(Dropdown d)
+        {
+            RectTransform template = d.template;
+            if (template.GetComponent<ScrollRect>() != null)
+                return;
+            Toggle item = template.GetComponentInChildren<Toggle>(true);
+            if (item == null)
+                return;
+
+            template.anchorMin = new Vector2(0f, 0f);
+            template.anchorMax = new Vector2(1f, 0f);
+            template.pivot = new Vector2(0.5f, 1f);
+            template.anchoredPosition = new Vector2(0f, -3f);
+            template.sizeDelta = new Vector2(0f, 230f);
+            var bg = template.GetComponent<Image>() ?? template.gameObject.AddComponent<Image>();
+            Panel(bg, new Color32(78, 78, 78, 255)); // a shade lighter than the window it opens over
+            bg.raycastTarget = true;
+
+            var viewport = new GameObject("Viewport", typeof(RectTransform), typeof(RectMask2D)).GetComponent<RectTransform>();
+            viewport.SetParent(template, false);
+            viewport.anchorMin = Vector2.zero;
+            viewport.anchorMax = Vector2.one;
+            viewport.offsetMin = new Vector2(4f, 4f);
+            viewport.offsetMax = new Vector2(-4f, -4f);
+            var content = new GameObject("Content", typeof(RectTransform)).GetComponent<RectTransform>();
+            content.SetParent(viewport, false);
+            content.anchorMin = new Vector2(0f, 1f);
+            content.anchorMax = new Vector2(1f, 1f);
+            content.pivot = new Vector2(0.5f, 1f);
+            content.anchoredPosition = Vector2.zero;
+            content.sizeDelta = new Vector2(0f, 24f);
+
+            var irt = (RectTransform)item.transform;
+            irt.SetParent(content, false);
+            irt.anchorMin = new Vector2(0f, 0.5f);
+            irt.anchorMax = new Vector2(1f, 0.5f);
+            irt.pivot = new Vector2(0.5f, 0.5f);
+            irt.anchoredPosition = Vector2.zero;
+            irt.sizeDelta = new Vector2(0f, 24f);
+
+            var scroll = template.gameObject.AddComponent<ScrollRect>();
+            scroll.viewport = viewport;
+            scroll.content = content;
+            scroll.horizontal = false;
+            scroll.movementType = ScrollRect.MovementType.Clamped;
+            scroll.scrollSensitivity = 24f;
+
+            // Row: invisible until hovered, accent bar on the current value
+            if (item.targetGraphic is Image row)
+            {
+                row.sprite = RoundedSmall;
+                row.type = Image.Type.Sliced;
+                row.color = Color.white;
+            }
+            var colors = item.colors;
+            colors.normalColor = new Color(1f, 1f, 1f, 0f);
+            colors.highlightedColor = FieldHover;
+            colors.selectedColor = FieldHover;
+            colors.pressedColor = Track;
+            colors.colorMultiplier = 1f;
+            colors.fadeDuration = 0.05f;
+            item.colors = colors;
+            if (!(item.graphic is Image mark))
+            {
+                mark = new GameObject("Current", typeof(RectTransform), typeof(Image)).GetComponent<Image>();
+                mark.transform.SetParent(irt, false);
+                item.graphic = mark;
+            }
+            mark.sprite = RoundedSmall;
+            mark.type = Image.Type.Sliced;
+            mark.color = Accent;
+            mark.raycastTarget = false;
+            var mrt = mark.rectTransform;
+            mrt.anchorMin = mrt.anchorMax = new Vector2(0f, 0.5f);
+            mrt.pivot = new Vector2(0f, 0.5f);
+            mrt.anchoredPosition = new Vector2(3f, 0f);
+            mrt.sizeDelta = new Vector2(3f, 14f);
+            if (d.itemText != null)
+            {
+                Text(d.itemText, Regular, 13, TextMain, TextAnchor.MiddleLeft);
+                var trt = d.itemText.rectTransform;
+                trt.anchorMin = Vector2.zero;
+                trt.anchorMax = Vector2.one;
+                trt.offsetMin = new Vector2(12f, 0f);
+                trt.offsetMax = new Vector2(-8f, 0f);
+            }
+        }
+
         internal static void Toggle(Toggle t)
         {
             if (t == null)
@@ -260,8 +369,20 @@ namespace SizeboxTweaks.UI
             }
             if (t.graphic is Image check)
             {
-                check.color = Accent;
-                check.rectTransform.sizeDelta = new Vector2(14f, 14f);
+                // the game's tick sprite is dark, so tinting it does nothing; use our own
+                check.sprite = CheckOn;
+                check.type = Image.Type.Simple;
+                check.color = Color.white;
+                var rt = check.rectTransform;
+                if (t.targetGraphic != null && check.transform.parent != t.targetGraphic.transform)
+                {
+                    // sit exactly on the box wherever the prefab put it
+                    rt.SetParent(t.targetGraphic.transform, false);
+                }
+                rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
+                rt.pivot = new Vector2(0.5f, 0.5f);
+                rt.anchoredPosition = Vector2.zero;
+                rt.sizeDelta = new Vector2(16f, 16f);
             }
         }
 
@@ -273,7 +394,7 @@ namespace SizeboxTweaks.UI
             if (img != null)
                 img.color = new Color(0, 0, 0, 0);
             if (sb.handleRect != null)
-                Panel(sb.handleRect.GetComponent<Image>(), new Color32(90, 96, 112, 200), true);
+                Panel(sb.handleRect.GetComponent<Image>(), new Color32(130, 130, 130, 220), true);
             var rt = (RectTransform)sb.transform;
             rt.sizeDelta = new Vector2(width, rt.sizeDelta.y);
         }

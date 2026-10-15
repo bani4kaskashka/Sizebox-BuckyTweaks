@@ -50,7 +50,7 @@ namespace SizeboxTweaks.UI
             bdr.anchorMax = Vector2.one;
             bdr.offsetMin = bdr.offsetMax = Vector2.zero;
             _backdrop = bd.GetComponent<RawImage>();
-            _backdrop.color = new Color(0.55f, 0.57f, 0.62f, 1f);
+            _backdrop.color = new Color(0.62f, 0.62f, 0.62f, 1f);
             _backdrop.raycastTarget = true;
 
             foreach (Image img in GetComponentsInChildren<Image>(true).Where(i => i.name == "PausePanel"))
@@ -120,8 +120,21 @@ namespace SizeboxTweaks.UI
             ReleaseBlur();
         }
 
+        private bool _cursorFixed;
+
         private void Update()
         {
+            // Sizebox hides and locks the cursor when its open-menu count drops to zero. Whatever
+            // causes that, nobody should lose the mouse while the pause menu is up.
+            if (!Cursor.visible || Cursor.lockState != CursorLockMode.None)
+            {
+                if (!_cursorFixed)
+                    Plugin.Log.LogWarning("Pause menu: the cursor was hidden/locked, giving it back");
+                _cursorFixed = true;
+                Cursor.visible = true;
+                Cursor.lockState = CursorLockMode.None;
+            }
+
             // The button list hides while a settings window, the save menu or the stage picker is open
             if (_buttonPanel == null)
                 return;
@@ -173,7 +186,7 @@ namespace SizeboxTweaks.UI
                 _backdrop.texture = _blurred;
                 // The capture comes out upside down on some graphics APIs
                 _backdrop.uvRect = SystemInfo.graphicsUVStartsAtTop ? new Rect(0f, 1f, 1f, -1f) : new Rect(0f, 0f, 1f, 1f);
-                _backdrop.color = new Color(0.62f, 0.64f, 0.7f, 1f);
+                _backdrop.color = new Color(0.62f, 0.62f, 0.62f, 1f);
             }
             catch (Exception e)
             {
