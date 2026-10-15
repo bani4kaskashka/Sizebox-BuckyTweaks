@@ -78,6 +78,33 @@ namespace SizeboxTweaks.UI
             return Sprite.Create(tex, new Rect(0, 0, n, n), new Vector2(0.5f, 0.5f));
         }
 
+        // Four small rounded squares: "show all as a grid"
+        internal static Sprite GridIcon => _gridIcon ?? (_gridIcon = MakeGridIcon());
+        private static Sprite _gridIcon;
+
+        private static Sprite MakeGridIcon()
+        {
+            const int n = 32, cell = 13, gap = 6;
+            var tex = new Texture2D(n, n, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear };
+            var px = new Color32[n * n];
+            for (int y = 0; y < n; y++)
+                for (int x = 0; x < n; x++)
+                {
+                    float a = 0f;
+                    foreach (int ox in new[] { 0, cell + gap })
+                        foreach (int oy in new[] { 0, cell + gap })
+                        {
+                            var p = new Vector2(x + 0.5f - ox, y + 0.5f - oy);
+                            float cx = Mathf.Clamp(p.x, 3f, cell - 3f), cy = Mathf.Clamp(p.y, 3f, cell - 3f);
+                            a = Mathf.Max(a, Mathf.Clamp01(0.5f - (Vector2.Distance(p, new Vector2(cx, cy)) - 3f)));
+                        }
+                    px[y * n + x] = new Color32(255, 255, 255, (byte)(a * 255f));
+                }
+            tex.SetPixels32(px);
+            tex.Apply(false, true);
+            return Sprite.Create(tex, new Rect(0, 0, n, n), new Vector2(0.5f, 0.5f));
+        }
+
         // Small downward triangle for dropdowns
         internal static Sprite Chevron => _chevron ?? (_chevron = MakeChevron());
         private static Sprite _chevron;

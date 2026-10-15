@@ -19,7 +19,7 @@ Every menu got redone. One font, everything lined up, way less clutter. Same gra
 
 - **Pause menu** is short now and the game blurs behind it.
 - **Settings** is one window with tabs: Game, Video, Lighting, Audio, Controls.
-- **Change Stage** right from the pause menu. Search, pick, confirm, done.
+- **Change Stage** right from the pause menu. Search, pick, confirm, done. The main menu's stage select has the same grid behind a little button.
 - **Video** tells you what you're really running on (DX12, DX11 or Vulkan) and switches it for you with one restart.
 - **Koikatsu stages** get a square picture of the map the first time you visit.
 - **In-game controls** (bottom bar, catalog, transform, animation, pose, morphs) use the same font and controls.
@@ -39,6 +39,7 @@ Don't like it? `UI > ModernMenus = false` in F1 brings the old menus back.
 - **Normal jump.** About 50 cm instead of jumping over your own head.
 - **Stairs.** Walks up steps and stair ramps.
 - **Faster giantesses.** 2x by default, because big ones crawl.
+- **Solid characters.** Walking into someone doesn't bulldoze them across the map anymore.
 
 Everything can be tweaked in game with F1.
 

@@ -103,7 +103,8 @@ namespace SizeboxTweaks.UI
             float lum = 0.3f * c.r + 0.59f * c.g + 0.11f * c.b;
             if (lum > 0.2f || c.a < 0.2f)
                 return;
-            Skin.Panel(img, new Color(Skin.Card.r, Skin.Card.g, Skin.Card.b, 0.94f));
+            // Keep the panel's own see-through amount, so the game shows through like before
+            Skin.Panel(img, new Color(Skin.Card.r, Skin.Card.g, Skin.Card.b, c.a));
         }
     }
 

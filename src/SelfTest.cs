@@ -121,6 +121,13 @@ namespace SizeboxTweaks
                 yield break;
             }
 
+            if (Plugin.Test.Value == DevTest.Push)
+            {
+                yield return PushProbe();
+                Plugin.Log.LogInfo("[SelfTest] screenshot push done");
+                yield break;
+            }
+
             yield return HeightLineup();
         }
 
@@ -593,6 +600,22 @@ namespace SizeboxTweaks
                 // back to the main menu buttons
                 foreach (var v in FindObjectsOfType<SizeboxUI.MainMenuSettingsView>())
                     v.gameObject.SetActive(false);
+
+                // Stage select with the gallery button, the grid, then pick a tile
+                foreach (var v in FindObjectsOfType<SizeboxUI.MainMenuSettingsView>(true))
+                    v.gameObject.SetActive(false);
+                AccessTools.Method(typeof(MenuController), "OnStartClick").Invoke(menu, null);
+                yield return new WaitForSecondsRealtime(1f);
+                yield return Shot($"{tag}_16_stage_select");
+                var gallery = FindObjectsOfType<Button>().FirstOrDefault(b => b.name == "Bucky Stage Gallery");
+                gallery?.onClick.Invoke();
+                yield return new WaitForSecondsRealtime(1f);
+                yield return Shot($"{tag}_17_stage_gallery");
+                var pick = FindObjectsOfType<Button>().FirstOrDefault(b => b.transform.parent != null && b.transform.parent.name == "Content" && b.name.Contains("Kitchen"));
+                pick?.onClick.Invoke();
+                yield return new WaitForSecondsRealtime(1f);
+                yield return Shot($"{tag}_18_stage_picked");
+                Plugin.Log.LogInfo($"[SelfTest] gallery button {(gallery != null)}, picked {(pick != null)}");
             }
 
             var stage = loader.GetSceneList().First(s => s.Scene == "Island_SBE");
@@ -938,6 +961,69 @@ namespace SizeboxTweaks
                 yield return new WaitForSecondsRealtime(0.4f);
                 yield return Shot(name + "_bottom");
             }
+        }
+
+        // Walk the player into another micro for 3 s, once without and once with SolidCharacters,
+        // and log how far the other one got shoved.
+        private IEnumerator PushProbe()
+        {
+            AssetManager am = AssetManager.Instance;
+            var names = am.GetFemaleMicroAssetNames().ToList();
+            Transform cam = Camera.main.transform;
+            Vector3 fwd = cam.forward.Flatten().normalized;
+            Vector3 start = cam.position + fwd * 4f;
+            if (Physics.Raycast(start + Vector3.up * 50f, Vector3.down, out RaycastHit hit, 500f, Layers.walkableMask))
+                start = hit.point;
+            EntityBase me = null, other = null;
+            GameController.LocalClient.SpawnMicro(am.GetAssetDescriptionByName(names[0]), start, Quaternion.LookRotation(fwd), 1f, e => me = e);
+            GameController.LocalClient.SpawnMicro(am.GetAssetDescriptionByName(names[Mathf.Min(1, names.Count - 1)]), start + fwd * 1.6f, Quaternion.LookRotation(-fwd), 1f, e => other = e);
+            while (me == null || other == null)
+                yield return null;
+            yield return new WaitForSeconds(1.5f);
+            foreach (var e in new[] { me, other })
+                if (e is Humanoid h && h.ai != null)
+                    h.ai.DisableAI();
+            GameController.LocalClient.Player.PlayAs(me as IPlayable);
+            GameController.playerInputEnabled = true;
+            yield return new WaitForSeconds(1.5f);
+            var ctrl = FindObjectOfType<NewPlayerMicroController>();
+            Vector3 meStart = me.transform.position;
+            // Possessing turns the camera; put the other one 1.6 m ahead of where we'll walk
+            Vector3 walk = Camera.main.transform.forward.Flatten().normalized;
+            Vector3 otherStart = meStart + walk * 1.6f;
+
+            foreach (bool solid in new[] { false, true })
+            {
+                Plugin.SolidCharacters.Value = solid;
+                yield return new WaitForSeconds(0.6f); // let the id sets refresh
+                me.transform.position = meStart;
+                other.transform.position = otherStart;
+                me.GetComponent<Rigidbody>().velocity = Vector3.zero;
+                other.GetComponent<Rigidbody>().velocity = Vector3.zero;
+                yield return Drive(ctrl, 0f, 0f, 0.5f);
+                Vector3 o0 = other.transform.position, m0 = me.transform.position;
+                Plugin.Log.LogInfo($"[SelfTest] push: me {m0} facing {me.transform.forward}, other {o0}, cam fwd {Camera.main.transform.forward}");
+                foreach (var e in new[] { me, other })
+                    foreach (Collider c in e.GetComponentsInChildren<Collider>())
+                        if (c.attachedRigidbody == e.GetComponent<Rigidbody>() && !c.isTrigger)
+                            Plugin.Log.LogInfo($"[SelfTest] push: {e.name} collider {c.GetType().Name} layer {LayerMask.LayerToName(c.gameObject.layer)} size {c.bounds.size}");
+                int lm = me.gameObject.layer, lo = other.gameObject.layer;
+                Plugin.Log.LogInfo($"[SelfTest] push: layers {LayerMask.LayerToName(lm)}/{LayerMask.LayerToName(lo)} ignore={Physics.GetIgnoreLayerCollision(lm, lo)}");
+                float minDist = float.MaxValue, t = 0f;
+                while (t < 3f)
+                {
+                    SetInput(ctrl, 0f, 1f);
+                    yield return new WaitForFixedUpdate();
+                    t += Time.fixedDeltaTime;
+                    minDist = Mathf.Min(minDist, (me.transform.position - other.transform.position).Flatten().magnitude);
+                }
+                Plugin.Log.LogInfo($"[SelfTest] push: closest {minDist:0.00} m");
+                yield return Drive(ctrl, 0f, 0f, 0.5f);
+                float shoved = (other.transform.position - o0).Flatten().magnitude;
+                float walked = (me.transform.position - m0).Flatten().magnitude;
+                Plugin.Log.LogInfo($"[SelfTest] push solid={solid}: other moved {shoved:0.00} m, player moved {walked:0.00} m");
+            }
+            yield return Shot("push_end");
         }
 
         private static void SetInput(NewPlayerMicroController c, float h, float v)

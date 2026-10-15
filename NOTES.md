@@ -166,3 +166,10 @@ Turn it all off with `[UI] ModernMenus = false`; the blur alone with `BlurPauseB
 - **Cursor.** Sizebox hides and locks the cursor when its open-menu count reaches zero. While the pause menu is open the cursor is kept free, and the first time something hides it a warning is logged (plus a stack trace from `StateManager.Mouse.Remove`).
 - **Colours.** Cards use the game's own menu gray (66, 66, 66) with lighter grays for fields and tracks; the blue accent stays.
 - **In-game controls.** `EditSkin` (added to `GuiManager.EditMode`) rescans the edit HUD twice a second and styles what it hasn't seen: SF Atarian text becomes OpenSans at about 60% of the point size, sliders/toggles/fields/dropdowns/scrollbars get the menu style, and dark backing panels get the gray. Colours the game changes itself (selected category) are left alone.
+
+## 1.3.0
+
+- **Solid characters.** Walking into another character shoved it away: the player controller sets its velocity directly and a same-size NPC has the same mass. Measured 17.9 m pushed in 3 s. Raising NPC mass would change the game's crush maths, so instead `Physics.ContactModifyEvent` makes the other character immovable only in contacts with the player (`otherInverseMassScale = 0`). Now 0.0 m; you stop against them. `Movement > SolidCharacters`.
+- **Stage select gallery.** A small grid button under the "next" arrow opens the Change Stage grid; picking a tile selects that stage (Start still loads). Keys of the stage select are ignored while the grid is open (space in the search box would otherwise start the game).
+- **Koikatsu characters** (beta, `[Koikatsu Characters] Enabled`): listed first in its F1 section, turning it on works without a restart (reopen the catalog); dev keys are under Advanced.
+- **Movement** a touch smoother: Acceleration 12 to 10, Deceleration 16 to 13, TurnSpeed 20 to 12 (configs on the old defaults are moved over once).

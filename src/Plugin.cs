@@ -25,7 +25,8 @@ namespace SizeboxTweaks
         Drift,
         Menu,
         Stairs,
-        UiTour
+        UiTour,
+        Push
     }
 
     [BepInPlugin(Guid, Name, Version)]
@@ -33,7 +34,7 @@ namespace SizeboxTweaks
     {
         public const string Guid = "sizebox.tweaks";
         public const string Name = "Bucky Tweaks";
-        public const string Version = "1.2.0";
+        public const string Version = "1.3.0";
 
         internal static ManualLogSource Log;
 
@@ -48,6 +49,7 @@ namespace SizeboxTweaks
         internal static ConfigEntry<float> AnimationDamp;
         internal static ConfigEntry<float> JumpHeight;
         internal static ConfigEntry<float> StepHeight;
+        internal static ConfigEntry<bool> SolidCharacters;
         internal static ConfigEntry<GraphicsChoice> Graphics;
         // Movement (player giantess)
         internal static ConfigEntry<float> GtsSpeedChange;
@@ -85,11 +87,11 @@ namespace SizeboxTweaks
 
             MovementEnabled = Config.Bind("Movement", "Enabled", true,
                 "Replace the floaty player movement with snappier values. Off = the game's own values.");
-            Acceleration = Config.Bind("Movement", "Acceleration", 12f,
+            Acceleration = Config.Bind("Movement", "Acceleration", 10f,
                 new ConfigDescription("How fast you reach running speed. Game default 4 (about half a second to get going).", new AcceptableValueRange<float>(1f, 40f)));
-            Deceleration = Config.Bind("Movement", "Deceleration", 16f,
+            Deceleration = Config.Bind("Movement", "Deceleration", 13f,
                 new ConfigDescription("How fast you stop when you let go of the keys. Game default 4 (about half a second of sliding).", new AcceptableValueRange<float>(1f, 40f)));
-            TurnSpeed = Config.Bind("Movement", "TurnSpeed", 20f,
+            TurnSpeed = Config.Bind("Movement", "TurnSpeed", 12f,
                 new ConfigDescription("How fast the body turns to face the move direction. Game default 3, which makes you slide sideways while turning.", new AcceptableValueRange<float>(1f, 40f)));
             WalkSpeed = Config.Bind("Movement", "WalkSpeedMultiplier", 0.5f,
                 new ConfigDescription("Walk (toggle) speed multiplier. Game default 0.5.", new AcceptableValueRange<float>(0.05f, 3f)));
@@ -108,6 +110,13 @@ namespace SizeboxTweaks
                 new ConfigDescription("How fast a player-controlled giantess speeds up and slows down. Game default 5.", new AcceptableValueRange<float>(1f, 30f)));
             GtsTurnSpeed = Config.Bind("Movement (Giantess)", "TurnSpeed", 10f,
                 new ConfigDescription("How fast a player-controlled giantess turns. Game default 10.", new AcceptableValueRange<float>(1f, 40f)));
+            // 1.3.0: a touch smoother turning and starting/stopping. Move people still on the
+            // old defaults to the new ones; values someone picked themselves stay.
+            if (Mathf.Approximately(Acceleration.Value, 12f)) Acceleration.Value = 10f;
+            if (Mathf.Approximately(Deceleration.Value, 16f)) Deceleration.Value = 13f;
+            if (Mathf.Approximately(TurnSpeed.Value, 20f)) TurnSpeed.Value = 12f;
+            SolidCharacters = Config.Bind("Movement", "SolidCharacters", true,
+                "Other characters don't get shoved around when you walk into them; you bump into them instead. Only affects you vs. them.");
             GtsSpeedMultiplier = Config.Bind("Movement (Giantess)", "SpeedMultiplier", 2f,
                 new ConfigDescription("Walk/run/animation speed of every giantess (player and AI). 1 = game speed. The game also slows big giantesses down " +
                     "(Settings > 'Giantess Speed Affected by Scale': a 100 m giantess moves at 60%, 1 km at 40%); this multiplies on top.", new AcceptableValueRange<float>(0.25f, 6f)));
@@ -168,6 +177,9 @@ namespace SizeboxTweaks
                 DontDestroyOnLoad(host);
                 host.AddComponent<SelfTest>();
             }
+            var keep = new GameObject("BuckyTweaks") { hideFlags = HideFlags.HideAndDontSave };
+            DontDestroyOnLoad(keep);
+            global::SizeboxTweaks.SolidCharacters.Install(keep);
 
             Log.LogInfo($"Koikatsu: '{KoikatsuDir.Value}', Sunshine: '{KoikatsuSunshineDir.Value}'");
             Log.LogInfo($"{Name} {Version} loaded (height mode {Height.Value}, movement {(MovementEnabled.Value ? "tuned" : "vanilla")})");

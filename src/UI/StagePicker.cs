@@ -7,32 +7,60 @@ using UnityEngine.UI;
 
 namespace SizeboxTweaks.UI
 {
-    // "Change Stage" from the pause menu: every stage (built in, custom and Koikatsu) as a tile
-    // grid with a search box. Picking one asks first, then loads it like Restart does.
+    // Every stage (built in, custom and Koikatsu) as a tile grid with a search box. From the
+    // pause menu a pick asks first, then loads it like Restart does; in the main menu's stage
+    // select it just selects that stage.
     internal class StagePicker : MonoBehaviour
     {
         private const float Width = 720f, Height = 470f, Tile = 124f, Gap = 10f;
 
         private readonly List<(GameObject Tile, string Name)> _tiles = new List<(GameObject, string)>();
-        private PauseView _pause;
+        private System.Action<SceneLoader.SceneInfo, string> _pick;
+        private System.Action _close;
 
+        // Pause menu: confirm, then load
         internal static GameObject Create(Transform parent, PauseView pause)
+        {
+            string active = SceneManager.GetActiveScene().name;
+            return Create(parent, "Change Stage", i => i.Scene == active, Confirm, () => pause.CloseIfOpen(), false);
+        }
+
+        internal static GameObject Create(Transform parent, string titleText, System.Func<SceneLoader.SceneInfo, bool> isCurrent,
+            System.Action<SceneLoader.SceneInfo, string> pick, System.Action close, bool dim)
         {
             var go = new GameObject("Bucky Stage Picker", typeof(RectTransform));
             go.transform.SetParent(parent, false);
             var rt = (RectTransform)go.transform;
+            if (dim)
+            {
+                // Full-screen shade behind the window (the pause menu has its own blur)
+                rt.anchorMin = Vector2.zero;
+                rt.anchorMax = Vector2.one;
+                rt.offsetMin = rt.offsetMax = Vector2.zero;
+                var shade = go.AddComponent<Image>();
+                shade.color = new Color(0f, 0f, 0f, 0.6f);
+                var inner = new GameObject("Window", typeof(RectTransform));
+                inner.transform.SetParent(go.transform, false);
+                var irt = (RectTransform)inner.transform;
+                irt.anchorMin = irt.anchorMax = new Vector2(0.5f, 0.5f);
+                irt.sizeDelta = new Vector2(Width, Height + 90f);
+                inner.AddComponent<StagePicker>().Build(titleText, isCurrent, pick, close);
+                return go;
+            }
             rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
             rt.sizeDelta = new Vector2(Width, Height + 90f);
-            go.AddComponent<StagePicker>().Build(pause);
+            go.AddComponent<StagePicker>().Build(titleText, isCurrent, pick, close);
             return go;
         }
 
-        private void Build(PauseView pause)
+        private void Build(string titleText, System.Func<SceneLoader.SceneInfo, bool> isCurrent,
+            System.Action<SceneLoader.SceneInfo, string> pick, System.Action close)
         {
-            _pause = pause;
+            _pick = pick;
+            _close = close;
 
             var title = NewChild<Text>("Title", transform);
-            title.text = "Change Stage";
+            title.text = titleText;
             Skin.Text(title, Skin.Bold, 24, Skin.TextMain, TextAnchor.LowerLeft);
             Place(title.rectTransform, new Vector2(0f, Height / 2f + 6f), new Vector2(Width, 40f), new Vector2(0.5f, 0f));
 
@@ -95,18 +123,17 @@ namespace SizeboxTweaks.UI
             scroll.verticalScrollbarVisibility = ScrollRect.ScrollbarVisibility.AutoHide;
 
             var loader = FindObjectOfType<SceneLoader>();
-            string current = SceneManager.GetActiveScene().name;
             if (loader != null)
                 foreach (SceneLoader.SceneInfo info in loader.GetSceneList())
-                    AddTile(content, loader, info, info.Scene == current);
+                    AddTile(content, info, isCurrent(info));
 
             // Back, under the card on the right
             Button back = PauseUi.MakeButton(transform, "Back", true);
             Place((RectTransform)back.transform, new Vector2(Width / 2f, -Height / 2f - 10f), new Vector2(120f, 32f), new Vector2(1f, 1f));
-            back.onClick.AddListener(() => _pause.CloseIfOpen());
+            back.onClick.AddListener(() => _close());
         }
 
-        private void AddTile(Transform content, SceneLoader loader, SceneLoader.SceneInfo info, bool current)
+        private void AddTile(Transform content, SceneLoader.SceneInfo info, bool current)
         {
             string name = Pretty(info.Scene);
             var bg = NewChild<Image>(name, content);
@@ -159,12 +186,13 @@ namespace SizeboxTweaks.UI
             if (name.Length > 18)
                 label.fontSize = 11;
 
-            button.onClick.AddListener(() => Confirm(loader, info, name));
+            button.onClick.AddListener(() => _pick(info, name));
             _tiles.Add((bg.gameObject, name.ToLowerInvariant()));
         }
 
-        private static void Confirm(SceneLoader loader, SceneLoader.SceneInfo info, string name)
+        private static void Confirm(SceneLoader.SceneInfo info, string name)
         {
+            var loader = FindObjectOfType<SceneLoader>();
             UiMessageBox box = UiMessageBox.Create($"Load {name}?\nAll unsaved progress will be lost.", "Change Stage");
             box.AddButtonsYesNo(() =>
             {
