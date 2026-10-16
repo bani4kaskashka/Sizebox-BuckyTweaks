@@ -37,12 +37,18 @@ namespace SizeboxTweaks
             EntityBase me = GameController.LocalClient.Player?.Entity;
             var player = new HashSet<int>();
             var others = new HashSet<int>();
+            // A giantess walks through crowds and bodies as before; only people about your own
+            // size (and alive) stand their ground.
+            float myScale = me != null ? me.MeshHeight : 0f;
             foreach (Humanoid h in FindObjectsOfType<Humanoid>())
             {
                 Rigidbody rb = h.Rigidbody;
                 if (rb == null)
                     continue;
-                (h == me ? player : others).Add(rb.GetInstanceID());
+                if (h == me)
+                    player.Add(rb.GetInstanceID());
+                else if (me != null && !me.isGiantess && !h.IsDead && h.MeshHeight >= myScale * 0.5f)
+                    others.Add(rb.GetInstanceID());
                 // Contacts are only reported for modification on colliders that ask for it
                 if (_modifiable.Add(h.GetInstanceID()))
                     foreach (Collider c in h.GetComponentsInChildren<Collider>(true))

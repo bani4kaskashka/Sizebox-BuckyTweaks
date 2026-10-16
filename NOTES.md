@@ -173,3 +173,19 @@ Turn it all off with `[UI] ModernMenus = false`; the blur alone with `BlurPauseB
 - **Stage select gallery.** A small grid button under the "next" arrow opens the Change Stage grid; picking a tile selects that stage (Start still loads). Keys of the stage select are ignored while the grid is open (space in the search box would otherwise start the game).
 - **Koikatsu characters** (beta, `[Koikatsu Characters] Enabled`): listed first in its F1 section, turning it on works without a restart (reopen the catalog); dev keys are under Advanced.
 - **Movement** a touch smoother: Acceleration 12 to 10, Deceleration 16 to 13, TurnSpeed 20 to 12 (configs on the old defaults are moved over once).
+
+## 1.4.0
+
+- **Spawn size.** Catalog spawns used `InterfaceControl.lastMicroScale`, the size of the last selected micro; after shrinking one with the gun every new spawn was millimetres tall. The getter now returns the map's starting size (`Gameplay > SpawnAtNormalSize`).
+- **Koikatsu maps** get a `MapSettings` with `minPlayerSize = 0.1` like Island (without one the game allows 0.001).
+- **Restart** on custom and Koikatsu stages: the game reloads by Unity scene name, which doesn't match those entries, and forgets the loaded entry after loading. The last `SceneLoader.LoadScene(SceneInfo)` is remembered and reloaded. Tested on KK Ground: reloads in 1 s (before: nothing).
+- **Void rescue.** The last spot the player stood on solid ground for 1 s is kept; falling with nothing at all below for 1.2 s puts them back there. Gives up after 3 rescues in 10 s. Tested: back after 1.5 s.
+- **Giantess and bodies.** SolidCharacters only holds living characters at least half your size, and never when you play a giantess.
+- **Jump** 0.3 to 0.38 body heights. **Camera** wheel zoom x2.5, Shift + wheel height x1.8 (`Camera` section). Edit mode uses a different camera (`SimCam`, own `_zoomSpeed`), sped up by the same setting.
+- **Quality preset** is three buttons that drive the game's own preset dropdown.
+- **Quick save / load** (F5 / F9, `Hotkeys`): saves `Quicksave.json` like the Save menu does. Loading in a stage needed one fix: reading a save raises the game's "rebuild the scene" flag at once, so the running stage rebuilt itself just before being unloaded and the new one came up empty. The flag is held until the new stage is loaded. Saves now store the stage list name for custom and Koikatsu stages (the Unity scene name didn't match anything in the list), so those load too.
+- **Undo / redo** (Ctrl+Z / Ctrl+Alt+Z, edit mode, 30 steps; every applied step hands back its opposite for the other list, and a new edit clears redo): Delete hides the thing instead of destroying it (destroyed once it drops off the list or the stage changes); moves, rotations and resizes of the selected thing are recorded once they settle with no mouse button held.
+- **Favourites and recents.** Right-click a stage tile or a catalog tile to star it; starred stages, then the last 8 played, come first in the stage grid; starred catalog entries come first in their catalog. Kept in `BepInEx/config/BuckyTweaks.qol.json`.
+- **Height under the mouse** in edit mode: name and height of the character you point at.
+- **Spawn height per stage**: a Height field next to "Play as spawned" in the Micro and Macro catalogs; catalog spawns on that stage get exactly that height (empty = normal).
+- **Photo mode** (F2): hides every menu and HUD until pressed again; the screenshot key still works.

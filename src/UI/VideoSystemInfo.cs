@@ -37,6 +37,8 @@ namespace SizeboxTweaks.UI
             if (grid == null)
                 return;
 
+            QualityButtons(Traverse.Create(view).Field("_dropQuality").GetValue<Dropdown>());
+
             // Drop everything from the game's "Build Information" header down
             bool drop = false;
             foreach (Transform row in grid.transform.Cast<Transform>().ToList())
@@ -87,6 +89,50 @@ namespace SizeboxTweaks.UI
             var px = Chainloader.PluginInfos.Values.FirstOrDefault(p => p.Metadata.Name.Contains("PerspectiveX"));
             if (px != null)
                 Call(view, "AddReadOnly", "PerspectiveX", px.Metadata.Version.ToString());
+        }
+
+        private static int _lastPreset = -1;
+
+        // The quality preset is an action (it sets a dozen other options at once), not a value,
+        // so it's three buttons instead of a dropdown with "-" in it. They still drive the
+        // game's own dropdown, so the preset logic is the game's.
+        private static void QualityButtons(Dropdown presets)
+        {
+            if (presets == null || presets.options.Count < 4)
+                return;
+            Transform row = presets.transform.parent;
+            presets.gameObject.SetActive(false);
+            var box = new GameObject("Bucky Presets", typeof(RectTransform), typeof(HorizontalLayoutGroup));
+            box.transform.SetParent(row, false);
+            var rt = (RectTransform)box.transform;
+            rt.anchorMin = rt.anchorMax = new Vector2(1f, 0.5f);
+            rt.pivot = new Vector2(1f, 0.5f);
+            rt.anchoredPosition = Vector2.zero;
+            rt.sizeDelta = new Vector2(250f, 24f);
+            var layout = box.GetComponent<HorizontalLayoutGroup>();
+            layout.spacing = 6f;
+            layout.childControlWidth = layout.childControlHeight = true;
+            layout.childForceExpandWidth = layout.childForceExpandHeight = true;
+            var buttons = new List<Button>();
+            for (int i = 1; i < 4; i++)
+            {
+                int index = i;
+                Button b = PauseUi.MakeButton(box.transform, presets.options[i].text, index == _lastPreset);
+                foreach (Text t in b.GetComponentsInChildren<Text>(true))
+                    t.fontSize = 12;
+                buttons.Add(b);
+                b.onClick.AddListener(() =>
+                {
+                    _lastPreset = index;
+                    presets.value = index; // runs the game's SetQualityPreset
+                    for (int k = 0; k < buttons.Count; k++)
+                    {
+                        Skin.Button(buttons[k], k + 1 == index);
+                        foreach (Text t in buttons[k].GetComponentsInChildren<Text>(true))
+                            t.fontSize = 12;
+                    }
+                });
+            }
         }
 
         private static string RunningText()

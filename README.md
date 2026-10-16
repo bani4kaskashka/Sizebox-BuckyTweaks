@@ -32,6 +32,18 @@ Every menu got redone. One font, everything lined up, way less clutter. Same gra
 
 Don't like it? `UI > ModernMenus = false` in F1 brings the old menus back.
 
+## Handy stuff
+
+- **F5 / F9** quick save and quick load
+- **Ctrl+Z / Ctrl+Alt+Z** undo and redo in edit mode (deletes, moves, rotations, resizes)
+- **F2** photo mode, hides every menu until you press it again
+- **Right-click** a stage or a catalog tile to favourite it, favourites and recent stages come first
+- Point at a character in edit mode to see their height
+- **Height** box in the catalog: everything you spawn on that stage comes out that tall
+- Restart works on Koikatsu stages, and if you fall through a map you get put back where you stood
+
+All keys can be changed in F1.
+
 ## Fixes
 
 - **Less slidey movement.** Starting, stopping and turning are snappy now, no ice skating.

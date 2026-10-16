@@ -613,6 +613,13 @@ namespace SizeboxTweaks
             SceneManager.MoveGameObjectToScene(go, scene);
             go.transform.position = spawn + Vector3.up * camHeight;
             LastSpawn = spawn;
+            if (!scene.GetRootGameObjects().Any(r => r.GetComponentInChildren<MapSettings>(true) != null))
+            {
+                // Without map settings the game allows micros down to 0.001 (a millimetre)
+                var settings = new GameObject("KK Map Settings");
+                SceneManager.MoveGameObjectToScene(settings, scene);
+                settings.AddComponent<MapSettings>().minPlayerSize = 0.1f;
+            }
             go.AddComponent<PlayerSpawnPoint>();
         }
 

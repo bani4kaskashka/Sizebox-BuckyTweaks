@@ -78,6 +78,45 @@ namespace SizeboxTweaks.UI
             return Sprite.Create(tex, new Rect(0, 0, n, n), new Vector2(0.5f, 0.5f));
         }
 
+        // Five-pointed star for favourites
+        internal static Sprite StarIcon => _star ?? (_star = MakeStar());
+        private static Sprite _star;
+
+        private static Sprite MakeStar()
+        {
+            const int n = 32;
+            var pts = new Vector2[10];
+            for (int i = 0; i < 10; i++)
+            {
+                float r = i % 2 == 0 ? 15f : 6.5f;
+                float a = Mathf.PI / 2f + i * Mathf.PI / 5f;
+                pts[i] = new Vector2(16f + Mathf.Cos(a) * r, 16f + Mathf.Sin(a) * r);
+            }
+            var tex = new Texture2D(n, n, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear };
+            var px = new Color32[n * n];
+            for (int y = 0; y < n; y++)
+                for (int x = 0; x < n; x++)
+                {
+                    // 4x4 supersampled point-in-polygon for smooth edges
+                    int hits = 0;
+                    for (int sy = 0; sy < 4; sy++)
+                        for (int sx = 0; sx < 4; sx++)
+                        {
+                            var p = new Vector2(x + (sx + 0.5f) / 4f, y + (sy + 0.5f) / 4f);
+                            bool inside = false;
+                            for (int i = 0, j = 9; i < 10; j = i++)
+                                if ((pts[i].y > p.y) != (pts[j].y > p.y) && p.x < (pts[j].x - pts[i].x) * (p.y - pts[i].y) / (pts[j].y - pts[i].y) + pts[i].x)
+                                    inside = !inside;
+                            if (inside)
+                                hits++;
+                        }
+                    px[y * n + x] = new Color32(255, 255, 255, (byte)(hits * 255 / 16));
+                }
+            tex.SetPixels32(px);
+            tex.Apply(false, true);
+            return Sprite.Create(tex, new Rect(0, 0, n, n), new Vector2(0.5f, 0.5f));
+        }
+
         // Four small rounded squares: "show all as a grid"
         internal static Sprite GridIcon => _gridIcon ?? (_gridIcon = MakeGridIcon());
         private static Sprite _gridIcon;

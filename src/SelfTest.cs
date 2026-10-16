@@ -121,6 +121,27 @@ namespace SizeboxTweaks
                 yield break;
             }
 
+            if (Plugin.Test.Value == DevTest.Qol)
+            {
+                yield return QolProbe();
+                Plugin.Log.LogInfo("[SelfTest] screenshot qol done");
+                yield break;
+            }
+
+            if (Plugin.Test.Value == DevTest.Gameplay)
+            {
+                yield return GameplayProbe();
+                Plugin.Log.LogInfo("[SelfTest] screenshot gameplay done");
+                yield break;
+            }
+
+            if (Plugin.Test.Value == DevTest.SpawnSize)
+            {
+                yield return SpawnSizeProbe();
+                Plugin.Log.LogInfo("[SelfTest] screenshot spawn done");
+                yield break;
+            }
+
             if (Plugin.Test.Value == DevTest.Push)
             {
                 yield return PushProbe();
@@ -961,6 +982,214 @@ namespace SizeboxTweaks
                 yield return new WaitForSecondsRealtime(0.4f);
                 yield return Shot(name + "_bottom");
             }
+        }
+
+        private IEnumerator QolProbe()
+        {
+            var gui = SizeboxUI.GuiManager.Instance;
+            var control = gui.InterfaceControl;
+            var placement = gui.EditPlacement;
+            AssetManager am = AssetManager.Instance;
+            AssetDescription asset = am.GetAssetDescriptionByName(am.GetFemaleMicroAssetNames().First(n => n.ToLowerInvariant().Contains("unitychan")));
+            void Log(string s) => Plugin.Log.LogInfo("[SelfTest] qol: " + s);
+            int Count() => FindObjectsOfType<Micro>().Length;
+
+            // per-stage spawn height
+            var h = QolData.Get.HeightsFor(_stage, true);
+            h.micro = 1.2f;
+            QolData.Save();
+            placement.AddMicro(asset, false);
+            yield return new WaitForSeconds(3f);
+            Micro m = FindObjectsOfType<Micro>().OrderByDescending(x => x.GetInstanceID()).First();
+            // place it, like clicking: otherwise the editor keeps the selection glued to the cursor
+            AccessTools.Method(typeof(SizeboxUI.EditPlacement), "PlaceObject").Invoke(placement, null);
+            Log($"spawn height set 1.2 m -> {GameController.ConvertScaleToHumanReadable(m.MeshHeight)}");
+            h.micro = 0f;
+            QolData.Save();
+            control.SetSelectedObject(m);
+            yield return new WaitForSeconds(0.5f);
+
+            // hover label: put the micro in the middle of the view
+            Transform cam = Camera.main.transform;
+            Vector3 front = cam.position + cam.forward * 4f;
+            EntityBase hm = null;
+            GameController.LocalClient.SpawnMicro(asset, front - Vector3.up, Quaternion.LookRotation(-cam.forward.Flatten()), 1f, x => hm = x);
+            while (hm == null)
+                yield return null;
+            if (hm is Humanoid hh && hh.ai != null)
+                hh.ai.DisableAI();
+            hm.Rigidbody.isKinematic = true;
+            hm.transform.position = front - Vector3.up * (hm.MeshHeight * 0.5f);
+            hm.Rigidbody.position = hm.transform.position;
+            yield return new WaitForSeconds(1f);
+            QolHost.TestMouse = new Vector2(Screen.width / 2f, Screen.height / 2f);
+            yield return new WaitForSeconds(0.5f);
+            Log($"hover label: '{QolHost.HoverText}'");
+            yield return Shot("qol_hover");
+            QolHost.TestMouse = null;
+
+            // undo a move (on the placed micro; the catalog one still follows the cursor)
+            m = (Micro)hm;
+            control.SetSelectedObject(m);
+            yield return new WaitForSeconds(0.5f);
+            m.Rigidbody.isKinematic = false;
+            if (Physics.Raycast(m.transform.position + Vector3.up * 50f, Vector3.down, out RaycastHit ground, 500f, Layers.walkableMask))
+            {
+                m.transform.position = ground.point;
+                m.Rigidbody.position = ground.point;
+            }
+            yield return new WaitForSeconds(1.5f);
+            Vector3 before = m.transform.position;
+            m.transform.position = before + Vector3.right * 3f;
+            m.Rigidbody.position = before + Vector3.right * 3f;
+            yield return new WaitForSeconds(1f);
+            Log($"moved: now before+{m.transform.position - before}");
+            Undo.Pop();
+            yield return new WaitForSeconds(0.3f);
+            Log($"undo move: off by {(m.transform.position - before).magnitude:0.000} (0 = right)");
+            Undo.Redo();
+            yield return new WaitForSeconds(0.3f);
+            Log($"redo move: off by {(m.transform.position - (before + Vector3.right * 3f)).magnitude:0.000} (0 = right); at before+{m.transform.position - before}, rb at before+{m.Rigidbody.position - before}");
+            Undo.Pop();
+            yield return new WaitForSeconds(0.3f);
+
+            // undo a delete
+            int n0 = Count();
+            control.DeleteObject();
+            yield return new WaitForSeconds(0.3f);
+            int n1 = Count();
+            Undo.Pop();
+            yield return new WaitForSeconds(0.3f);
+            Log($"undo delete: micros {n0} -> {n1} after delete -> {Count()} after undo");
+            Undo.Redo();
+            yield return new WaitForSeconds(0.3f);
+            Log($"redo delete: micros {Count()} (want {n1})");
+            Undo.Pop();
+            yield return new WaitForSeconds(0.3f);
+            Log($"undo again: micros {Count()} (want {n0})");
+            var simZoom = HarmonyLib.Harmony.GetPatchInfo(AccessTools.Method(typeof(SimCam), "Zoom"));
+            Log($"edit camera zoom patched: {simZoom != null && simZoom.Prefixes.Count > 0}");
+
+            // catalog favourite goes first
+            var catalog = Resources.FindObjectsOfTypeAll<CatalogView>().FirstOrDefault(c => c.gameObject.scene.IsValid());
+            var assets = am.GetModelAssets();
+            AssetDescription last = assets[assets.Count - 1];
+            QolData.Get.favAssets.Clear();
+            QolData.Toggle(QolData.Get.favAssets, CatalogPatches.Key(last));
+            if (catalog != null)
+            {
+                catalog.gameObject.SetActive(true);
+                CatalogPatches.Refresh(catalog);
+                var first = Traverse.Create(catalog).Field("_activeAssetsArray").GetValue<ThreadSafeList<AssetDescription>>()[0];
+                Log($"favourite '{last.AssetName}' first in catalog: {first == last}");
+                yield return new WaitForSeconds(0.5f);
+                yield return Shot("qol_catalog");
+            }
+            QolData.Get.favAssets.Clear();
+            QolData.Save();
+
+            // photo mode
+            var host = QolHost.Instance;
+            host.SetPhoto(true);
+            yield return new WaitForSeconds(0.5f);
+            Log($"photo mode: canvases still visible {FindObjectsOfType<Canvas>().Count(c => c.isRootCanvas && c.enabled && c.gameObject.activeInHierarchy && c.renderMode != RenderMode.WorldSpace)}");
+            yield return Shot("qol_photo");
+            host.SetPhoto(false);
+            yield return new WaitForSeconds(0.5f);
+
+            // quick save, change the scene, quick load
+            int saved = Count();
+            QolHost.QuickSave();
+            yield return new WaitForSeconds(1f);
+            placement.AddMicro(asset, false);
+            placement.AddMicro(asset, false);
+            yield return new WaitForSeconds(2f);
+            Log($"micros saved {saved}, now {Count()}, loading...");
+            QolHost.QuickLoad();
+            yield return new WaitForSeconds(12f);
+            Log($"after quick load: micros {Count()} (want {saved})");
+            yield return Shot("qol_quickload");
+        }
+
+        // Void rescue (walk the player off into nothing) and Restart on a custom stage.
+        private IEnumerator GameplayProbe()
+        {
+            AssetManager am = AssetManager.Instance;
+            string name = am.GetFemaleMicroAssetNames().First(n => n.ToLowerInvariant().Contains("unitychan"));
+            Vector3 pos = KoikatsuMaps.LastSpawn ?? Camera.main.transform.position;
+            if (Physics.Raycast(pos + Vector3.up, Vector3.down, out RaycastHit hit, 50f, Layers.walkableMask))
+                pos = hit.point;
+            EntityBase me = null;
+            GameController.LocalClient.SpawnMicro(am.GetAssetDescriptionByName(name), pos, Quaternion.identity, 1f, x => me = x);
+            while (me == null)
+                yield return null;
+            yield return new WaitForSeconds(1f);
+            GameController.LocalClient.Player.PlayAs(me as IPlayable);
+            GameController.playerInputEnabled = true;
+            yield return new WaitForSeconds(2f);
+            Vector3 safe = me.transform.position;
+            Plugin.Log.LogInfo($"[SelfTest] gameplay: standing at {safe}");
+            Vector3 off = safe + new Vector3(5000f, 0f, 5000f);
+            me.Rigidbody.position = off;
+            me.transform.position = off;
+            float t = 0f;
+            while (t < 6f && (me.transform.position - safe).magnitude > 5f)
+            {
+                yield return new WaitForSeconds(0.25f);
+                t += 0.25f;
+            }
+            Plugin.Log.LogInfo($"[SelfTest] gameplay: void rescue {((me.transform.position - safe).magnitude < 5f ? "OK" : "FAILED")} after {t:0.00} s, now at {me.transform.position}");
+
+            string before = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name;
+            int loads = 0;
+            UnityEngine.Events.UnityAction<UnityEngine.SceneManagement.Scene, UnityEngine.SceneManagement.LoadSceneMode> count = (s, m) => loads++;
+            UnityEngine.SceneManagement.SceneManager.sceneLoaded += count;
+            SavedScenesManager.Instance.RestartScene();
+            t = 0f;
+            while (loads == 0 && t < 30f)
+            {
+                yield return new WaitForSeconds(0.5f);
+                t += 0.5f;
+            }
+            UnityEngine.SceneManagement.SceneManager.sceneLoaded -= count;
+            Plugin.Log.LogInfo($"[SelfTest] gameplay: restart {(loads > 0 ? "OK" : "FAILED")}: '{before}' -> '{UnityEngine.SceneManagement.SceneManager.GetActiveScene().name}' after {t:0.0} s");
+            yield return new WaitForSeconds(5f);
+            yield return Shot("gameplay_after_restart");
+        }
+
+        // Spawn micros the way the catalog does (at InterfaceControl.lastMicroScale) and log
+        // every number that goes into their size and the Transform panel's "Size:" label.
+        private IEnumerator SpawnSizeProbe()
+        {
+            var control = SizeboxUI.GuiManager.Instance.InterfaceControl;
+            Plugin.Log.LogInfo($"[SelfTest] spawn: startingSize {MapSettingInternal.startingSize} minPlayer {MapSettingInternal.minPlayerSize} mapScale {MapSettingInternal.scale} reference {GameController.ReferenceScale} lastMicroScale {control.lastMicroScale}");
+            AssetManager am = AssetManager.Instance;
+            var names = am.GetFemaleMicroAssetNames().ToList();
+            var picks = new List<string> { names.First(n => n.ToLowerInvariant().Contains("unitychan")) };
+            picks.AddRange(names.Where(n => n.StartsWith("KK")).Take(1));
+            Transform cam = Camera.main.transform;
+            int i = 0;
+            foreach (string n in picks)
+            {
+                Vector3 pos = cam.position + cam.forward.Flatten().normalized * (3f + i * 1.5f);
+                if (Physics.Raycast(pos + Vector3.up * 20f, Vector3.down, out RaycastHit hit, 200f, Layers.walkableMask))
+                    pos = hit.point;
+                EntityBase e = null;
+                GameController.LocalClient.SpawnMicro(am.GetAssetDescriptionByName(n), pos, Quaternion.identity, control.lastMicroScale, x => e = x);
+                float waited = 0f;
+                while (e == null && waited < 30f) { waited += 0.5f; yield return new WaitForSeconds(0.5f); }
+                yield return new WaitForSeconds(1.5f);
+                if (e == null) { Plugin.Log.LogWarning("[SelfTest] spawn: " + n + " never spawned"); continue; }
+                float rh = 0f;
+                foreach (Renderer r in e.GetComponentsInChildren<Renderer>())
+                    rh = Mathf.Max(rh, r.bounds.max.y - e.transform.position.y);
+                Plugin.Log.LogInfo($"[SelfTest] spawn {n}: Scale {e.Scale} lossy {e.transform.lossyScale.y} meshHeight {e.meshHeight} MeshHeight {e.MeshHeight} label '{GameController.ConvertScaleToHumanReadable(e.MeshHeight)}' renderer top {rh:0.000} u");
+                control.SetSelectedObject(e);
+                yield return new WaitForSeconds(0.5f);
+                Plugin.Log.LogInfo($"[SelfTest] spawn: after selecting, lastMicroScale {control.lastMicroScale}");
+                i++;
+            }
+            yield return Shot("spawn_" + _stage);
         }
 
         // Walk the player into another micro for 3 s, once without and once with SolidCharacters,

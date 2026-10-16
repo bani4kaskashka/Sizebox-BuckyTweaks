@@ -64,6 +64,11 @@ namespace SizeboxTweaks.UI
             Skin.Text(title, Skin.Bold, 24, Skin.TextMain, TextAnchor.LowerLeft);
             Place(title.rectTransform, new Vector2(0f, Height / 2f + 6f), new Vector2(Width, 40f), new Vector2(0.5f, 0f));
 
+            var tip = NewChild<Text>("Hint", transform);
+            tip.text = "Right-click a stage to favourite it";
+            Skin.Text(tip, Skin.Regular, 11, Skin.TextDim, TextAnchor.LowerLeft);
+            Place(tip.rectTransform, new Vector2(-Width / 2f + 180f, Height / 2f + 10f), new Vector2(240f, 20f), new Vector2(0f, 0f));
+
             // Search box, top right, level with the title
             var searchBg = NewChild<Image>("Search", transform);
             Place(searchBg.rectTransform, new Vector2(Width / 2f, Height / 2f + 10f), new Vector2(220f, 30f), new Vector2(1f, 0f));
@@ -124,7 +129,13 @@ namespace SizeboxTweaks.UI
 
             var loader = FindObjectOfType<SceneLoader>();
             if (loader != null)
-                foreach (SceneLoader.SceneInfo info in loader.GetSceneList())
+                // Favourites first, then the last few played, then everything else
+                foreach (SceneLoader.SceneInfo info in loader.GetSceneList()
+                             .Select((s, i) => (s, i))
+                             .OrderBy(x => QolData.Get.favStages.Contains(x.s.Scene) ? 0 : 1)
+                             .ThenBy(x => { int r = QolData.Get.recentStages.IndexOf(x.s.Scene); return r < 0 ? 100 : r; })
+                             .ThenBy(x => x.i)
+                             .Select(x => x.s))
                     AddTile(content, info, isCurrent(info));
 
             // Back, under the card on the right
@@ -188,6 +199,7 @@ namespace SizeboxTweaks.UI
 
             button.onClick.AddListener(() => _pick(info, name));
             _tiles.Add((bg.gameObject, name.ToLowerInvariant()));
+            bg.gameObject.AddComponent<StageStar>().Stage = info.Scene;
         }
 
         private static void Confirm(SceneLoader.SceneInfo info, string name)
@@ -250,6 +262,38 @@ namespace SizeboxTweaks.UI
             rt.anchorMax = Vector2.one;
             rt.offsetMin = new Vector2(inset, inset);
             rt.offsetMax = new Vector2(-inset, -inset);
+        }
+    }
+
+    // Star in the corner of favourite stage tiles; right-click toggles it
+    internal class StageStar : MonoBehaviour, UnityEngine.EventSystems.IPointerClickHandler
+    {
+        internal string Stage;
+        private GameObject _star;
+
+        private void Start()
+        {
+            var img = new GameObject("Star", typeof(RectTransform), typeof(Image)).GetComponent<Image>();
+            img.transform.SetParent(transform, false);
+            var rt = img.rectTransform;
+            rt.anchorMin = rt.anchorMax = new Vector2(1f, 1f);
+            rt.pivot = new Vector2(1f, 1f);
+            rt.anchoredPosition = new Vector2(-8f, -8f);
+            rt.sizeDelta = new Vector2(18f, 18f);
+            img.sprite = Skin.StarIcon;
+            img.color = new Color32(255, 200, 70, 255);
+            img.raycastTarget = false;
+            _star = img.gameObject;
+            _star.SetActive(QolData.Get.favStages.Contains(Stage));
+        }
+
+        public void OnPointerClick(UnityEngine.EventSystems.PointerEventData e)
+        {
+            if (e.button != UnityEngine.EventSystems.PointerEventData.InputButton.Right)
+                return;
+            bool on = QolData.Toggle(QolData.Get.favStages, Stage);
+            _star.SetActive(on);
+            QolHost.Say(on ? "Favourite stage" : "Removed from favourites");
         }
     }
 

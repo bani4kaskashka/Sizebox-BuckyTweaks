@@ -26,7 +26,10 @@ namespace SizeboxTweaks
         Menu,
         Stairs,
         UiTour,
-        Push
+        Push,
+        SpawnSize,
+        Gameplay,
+        Qol
     }
 
     [BepInPlugin(Guid, Name, Version)]
@@ -34,7 +37,7 @@ namespace SizeboxTweaks
     {
         public const string Guid = "sizebox.tweaks";
         public const string Name = "Bucky Tweaks";
-        public const string Version = "1.3.0";
+        public const string Version = "1.4.0";
 
         internal static ManualLogSource Log;
 
@@ -50,6 +53,17 @@ namespace SizeboxTweaks
         internal static ConfigEntry<float> JumpHeight;
         internal static ConfigEntry<float> StepHeight;
         internal static ConfigEntry<bool> SolidCharacters;
+        internal static ConfigEntry<bool> SpawnNormalSize;
+        internal static ConfigEntry<bool> VoidRescue;
+        internal static ConfigEntry<float> ZoomSpeed;
+        internal static ConfigEntry<float> HeightScrollSpeed;
+        internal static ConfigEntry<KeyboardShortcut> QuickSaveKey;
+        internal static ConfigEntry<KeyboardShortcut> QuickLoadKey;
+        internal static ConfigEntry<KeyboardShortcut> UndoKey;
+        internal static ConfigEntry<KeyboardShortcut> RedoKey;
+        internal static ConfigEntry<KeyboardShortcut> PhotoModeKey;
+        internal static ConfigEntry<bool> UndoEnabled;
+        internal static ConfigEntry<bool> HoverHeight;
         internal static ConfigEntry<GraphicsChoice> Graphics;
         // Movement (player giantess)
         internal static ConfigEntry<float> GtsSpeedChange;
@@ -101,7 +115,7 @@ namespace SizeboxTweaks
                 new ConfigDescription("Sprint speed multiplier. Game default 1.38.", new AcceptableValueRange<float>(0.05f, 10f)));
             AnimationDamp = Config.Bind("Movement", "AnimationBlendTime", 0.15f,
                 new ConfigDescription("Seconds the walk/run animation takes to catch up with your speed. Game default 0.65, which looks like ice skating.", new AcceptableValueRange<float>(0.01f, 1f)));
-            JumpHeight = Config.Bind("Movement", "JumpHeight", 0.3f,
+            JumpHeight = Config.Bind("Movement", "JumpHeight", 0.38f,
                 new ConfigDescription("How high a micro jumps, as a fraction of their own height (0.3 = about 50 cm for a 1.65 m person). " +
                     "The game's jump goes about 1.25 body heights up.", new AcceptableValueRange<float>(0.05f, 2f)));
             StepHeight = Config.Bind("Movement", "StepHeight", 0.15f,
@@ -115,6 +129,23 @@ namespace SizeboxTweaks
             if (Mathf.Approximately(Acceleration.Value, 12f)) Acceleration.Value = 10f;
             if (Mathf.Approximately(Deceleration.Value, 16f)) Deceleration.Value = 13f;
             if (Mathf.Approximately(TurnSpeed.Value, 20f)) TurnSpeed.Value = 12f;
+            // 1.4.0: jump a bit higher so knee-high things can be jumped onto
+            if (Mathf.Approximately(JumpHeight.Value, 0.3f)) JumpHeight.Value = 0.38f;
+            SpawnNormalSize = Config.Bind("Gameplay", "SpawnAtNormalSize", true,
+                "New micros and objects from the catalog spawn at the map's normal size. Off = the game's way: the size of the last micro you selected (one you shrank with the gun makes every new one tiny).");
+            VoidRescue = Config.Bind("Gameplay", "RescueFromVoid", true,
+                "If you fall through the map with nothing below you, you're put back where you last stood.");
+            QuickSaveKey = Config.Bind("Hotkeys", "QuickSave", new KeyboardShortcut(KeyCode.F5), "Save the scene to Quicksave (shows up in Load like any save).");
+            QuickLoadKey = Config.Bind("Hotkeys", "QuickLoad", new KeyboardShortcut(KeyCode.F9), "Load the Quicksave.");
+            UndoKey = Config.Bind("Hotkeys", "Undo", new KeyboardShortcut(KeyCode.Z, KeyCode.LeftControl), "Edit mode: undo a delete, move, rotation or resize.");
+            RedoKey = Config.Bind("Hotkeys", "Redo", new KeyboardShortcut(KeyCode.Z, KeyCode.LeftControl, KeyCode.LeftAlt), "Edit mode: redo what Undo took back.");
+            PhotoModeKey = Config.Bind("Hotkeys", "PhotoMode", new KeyboardShortcut(KeyCode.F2), "Hide every menu and HUD until pressed again (the screenshot key still works).");
+            UndoEnabled = Config.Bind("Gameplay", "Undo", true, "Edit mode undo. Deleted things are kept hidden (up to 30 steps) so they can come back.");
+            HoverHeight = Config.Bind("Gameplay", "HeightUnderMouse", true, "Edit mode: show the name and height of the character under the mouse.");
+            ZoomSpeed = Config.Bind("Camera", "ZoomSpeed", 2.5f,
+                new ConfigDescription("Mouse wheel zoom speed in third person, times the game's.", new AcceptableValueRange<float>(0.5f, 6f)));
+            HeightScrollSpeed = Config.Bind("Camera", "HeightScrollSpeed", 1.8f,
+                new ConfigDescription("Shift + mouse wheel camera height speed, times the game's.", new AcceptableValueRange<float>(0.5f, 6f)));
             SolidCharacters = Config.Bind("Movement", "SolidCharacters", true,
                 "Other characters don't get shoved around when you walk into them; you bump into them instead. Only affects you vs. them.");
             GtsSpeedMultiplier = Config.Bind("Movement (Giantess)", "SpeedMultiplier", 2f,
@@ -180,6 +211,8 @@ namespace SizeboxTweaks
             var keep = new GameObject("BuckyTweaks") { hideFlags = HideFlags.HideAndDontSave };
             DontDestroyOnLoad(keep);
             global::SizeboxTweaks.SolidCharacters.Install(keep);
+            keep.AddComponent<VoidRescue>();
+            QolHost.Install(keep);
 
             Log.LogInfo($"Koikatsu: '{KoikatsuDir.Value}', Sunshine: '{KoikatsuSunshineDir.Value}'");
             Log.LogInfo($"{Name} {Version} loaded (height mode {Height.Value}, movement {(MovementEnabled.Value ? "tuned" : "vanilla")})");
